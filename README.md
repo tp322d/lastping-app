@@ -1,69 +1,54 @@
-<div align="center">
-
 # LastPing
 
-**Know the second anything goes silent.**
+**The only free tool that monitors your cron jobs *and* your CI/CD pipelines in one place — and when a pipeline fails, it tells you why.**
 
-Free, fully-hosted monitoring for the things that fail quietly — cron jobs,
-backups, CI/CD pipelines, and HTTP endpoints.
+[**lastping.dev**](https://lastping.dev) · [Dashboard](https://app.lastping.dev) · [Docs](https://app.lastping.dev/docs) · [Compare vs Healthchecks](https://lastping.dev/vs/healthchecks/)
 
-[**Start free → lastping.dev**](https://lastping.dev) · [Docs](https://app.lastping.dev/docs) · [Open the console](https://app.lastping.dev)
-
-<img src="https://lastping.dev/og.png" alt="LastPing operations console — heartbeat, CI/CD and uptime monitoring" width="720">
-
-</div>
+Cron jobs, backups, and CI/CD pipelines fail silently — the job that breaks can't tell you it broke. LastPing waits for each one to check in and opens an incident the moment it doesn't. It's **free and fully hosted** — no credit card, no paid tier.
 
 ---
 
-> This is the project home for LastPing — where the product is introduced and
-> where you can **file issues and request features**. LastPing is **free for
-> everyone and fully hosted** at [lastping.dev](https://lastping.dev): no setup,
-> no infrastructure to run, no paid tier.
+## Why LastPing
 
-## The problem
+- **Crons *and* pipelines, one console.** Heartbeat monitors for cron jobs, backups, and any scheduled task — alongside first-class CI/CD monitoring. Most free tools do one or the other.
+- **It tells you *why* CI failed.** Connect a GitHub Actions workflow with a signed `workflow_run` webhook and LastPing catches failed, hung, and never-started runs — and can attach the failing log excerpt to the alert, so the incident isn't just "something broke."
+- **Alerts on the very first check.** Email works out of the box (no routing to configure). Add Telegram, Slack, Discord, or signed outbound webhooks, and route which events reach which channel per monitor.
+- **Free, with no asterisk.** No monitor caps hidden behind a paid tier.
+- **We monitor ourselves with it.** LastPing watches its own infrastructure — see the live [self-monitoring status page](https://app.lastping.dev/status/lastping-self).
 
-Most monitoring tells you when a request *fails*. The harder problem is noticing
-when something that should have happened simply *didn't* — a nightly backup that
-never ran, a cron that silently died, a pipeline that hung. LastPing is built
-around **absence detection**: it waits for an expected signal and alerts you the
-moment it doesn't arrive on schedule.
+## Quickstart
 
-## What it monitors
+Create a monitor in the [dashboard](https://app.lastping.dev), then have your job ping its URL when it finishes:
 
-Three kinds of monitoring behind one alert pipeline:
+```bash
+# At the end of your cron job / backup script:
+curl -fsS -m 10 --retry 3 https://ping.lastping.dev/your-monitor-uuid
+```
 
-- **Heartbeat / cron** — your job sends one HTTP request to a unique URL when it
-  finishes. Miss the expected window (interval or cron schedule) and LastPing
-  opens an incident. The dead-man's-switch for backups, cron, and scheduled work.
-- **CI/CD pipelines** — a signed webhook from **GitHub Actions**, **GitLab CI**,
-  or **Jenkins**. No YAML changes: paste a webhook URL + secret. LastPing alerts
-  on failure *and* on silence (a pipeline that stops running), with a deep link
-  to the run and per-run metadata (branch, commit, duration).
-- **HTTP / uptime** — point LastPing at a URL and it probes it on a schedule for
-  status code, response latency, and body keywords.
+If that ping doesn't arrive within the schedule + grace window you set, LastPing opens an incident and alerts you. Signal the *start* of a long job (to catch overruns) or a hard *failure* with `/start` and `/fail` suffixes.
 
-## How alerts work
+For GitHub Actions, point a `workflow_run` webhook at your CI monitor and LastPing tracks every run — see the [GitHub Actions guide](https://lastping.dev/monitor/github-actions/).
 
-Alerts route to **email, Slack, Discord, Telegram, or webhooks** through a
-per-monitor **routing matrix** — you choose which destinations fire for
-*down*, *recovery*, *fail*, or *every run*. Messages are fully customizable with
-**Datadog-style templates** (`{variable}` substitution), with flap-damping and
-per-channel rate limits so a noisy monitor never becomes a pager storm.
+## What it does
 
-Add **public status pages** (90-day uptime history + incidents) and a
-terminal-native web console — Overview, Monitors, Incidents with MTTR, and
-Analytics.
+- Heartbeat / dead-man's-switch monitoring (interval or cron schedules, timezone-aware, configurable grace)
+- HTTP / uptime probing
+- CI/CD pipeline monitoring via signed GitHub `workflow_run` webhooks, with failure-detail capture
+- Incidents with a full event timeline
+- Alert channels: email, Telegram, Slack, Discord, outbound webhooks — with per-monitor event routing and custom message templates
+- Public status pages and status badges
+- A full REST API (interactive [API docs](https://app.lastping.dev/docs)) — everything you can do in the UI, you can do via the API
 
-## Get started
+## Free & hosted
 
-1. **[Sign up free at lastping.dev](https://lastping.dev)** — nothing to install.
-2. Create a monitor and copy its ping URL, webhook, or HTTP target.
-3. Add a destination (Slack/Discord/email/…) and you're covered.
+LastPing is **free and fully hosted** today — just sign up at [lastping.dev](https://lastping.dev). This repository is the project's public home (announcements, docs links, issues); the application is operated as a hosted service.
 
-Full walkthroughs and the API reference live in the
-**[docs](https://app.lastping.dev/docs)**.
+## Links
 
-## Feedback & issues
+- Site: https://lastping.dev
+- App: https://app.lastping.dev
+- Docs / API reference: https://app.lastping.dev/docs
+- Monitor GitHub Actions: https://lastping.dev/monitor/github-actions/
+- vs Healthchecks: https://lastping.dev/vs/healthchecks/ · vs Cronitor: https://lastping.dev/vs/cronitor/
 
-Found a bug or want a feature? **[Open an issue](https://github.com/tp322d/lastping-app/issues)** —
-this repo is where product feedback is tracked.
+<!-- TODO(design): add dashboard + CI-failure-detail screenshots here (task #49) -->
