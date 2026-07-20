@@ -39,6 +39,26 @@ For GitHub Actions, point a `workflow_run` webhook at your CI monitor and LastPi
 - Public status pages and status badges
 - A full REST API (interactive [API docs](https://app.lastping.dev/docs)) — everything you can do in the UI, you can do via the API
 
+## MCP server for AI agents (open source)
+
+This repo is the home of **`lastping-mcp`** — the open-source [MCP](https://modelcontextprotocol.io) server that lets an AI agent (Claude, Cursor, …) create and manage LastPing monitors, query incidents, and **instrument its own dead-man's-switch in a single conversation**.
+
+**Hosted (recommended)** — nothing to install; point your MCP client at the hosted server with your API key:
+
+```jsonc
+{ "mcpServers": { "lastping": {
+    "url": "https://mcp.lastping.dev",
+    "headers": { "Authorization": "Bearer lp_your_key_here" } } } }
+```
+
+**Self-host** the stdio binary instead:
+
+```bash
+go install github.com/tp322d/lastping-app/cmd/lastping-mcp@latest
+```
+
+See [`cmd/lastping-mcp/`](cmd/lastping-mcp/) (stdio, self-host), [`cmd/lastping-mcp-server/`](cmd/lastping-mcp-server/) (the hosted Streamable-HTTP server), and [`cmd/lastping-mcp/AGENTS.md`](cmd/lastping-mcp/AGENTS.md) for the agent-facing guide. Get an API key at [app.lastping.dev](https://app.lastping.dev) → Settings → API keys. MIT-licensed.
+
 ## Free & hosted
 
 LastPing is **free and fully hosted** today — just sign up at [lastping.dev](https://lastping.dev). This repository is the project's public home (announcements, docs links, issues); the application is operated as a hosted service.
