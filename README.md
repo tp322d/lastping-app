@@ -1,201 +1,179 @@
-# LastPing
+<div align="center">
 
-**The only free tool that monitors your cron jobs *and* your CI/CD pipelines in one place — and when a pipeline fails, it tells you why.**
+```
+   ██       █████  ███████ ████████ ██████  ██ ███    ██  ██████
+   ██      ██   ██ ██         ██    ██   ██ ██ ████   ██ ██
+   ██      ███████ ███████    ██    ██████  ██ ██ ██  ██ ██   ███
+   ██      ██   ██      ██    ██    ██      ██ ██  ██ ██ ██    ██
+   ███████ ██   ██ ███████    ██    ██      ██ ██   ████  ██████
 
-[**lastping.dev**](https://lastping.dev) · [Dashboard](https://app.lastping.dev) · [Docs](https://app.lastping.dev/docs) · [MCP server](https://lastping.dev/mcp/) · [Compare vs Healthchecks](https://lastping.dev/vs/healthchecks/)
+   ─────────╮ ╭──────────────╮ ╭─────────╮ ╭────────────────────
+            ╰─╯              ╰─╯          ╰─╯
+   still reporting                                    ↑ every run
+   ──────────────────────────────────────────────────────────────
+   nothing.                                    ↑ that's the alert
+```
 
-Cron jobs, backups, and CI/CD pipelines fail silently — the job that breaks can't tell you it broke. LastPing waits for each one to check in and opens an incident the moment it doesn't. It's **free and fully hosted** — no credit card, no paid tier.
+**The dead man's switch for everything that runs without you.**
+
+Cron jobs · backups · CI/CD pipelines · AI agents
+
+[![MIT](https://img.shields.io/badge/license-MIT-0f766e)](LICENSE)
+[![Go](https://img.shields.io/badge/go-1.26-0f766e)](go.mod)
+[![Terraform](https://img.shields.io/badge/terraform-lastping--dev%2Flastping-0f766e)](https://registry.terraform.io/providers/lastping-dev/lastping/latest)
+[![Free](https://img.shields.io/badge/free_for_individuals-0f766e)](https://lastping.dev)
+
+</div>
 
 ---
 
-## Why LastPing
+Most monitoring watches a thing and tells you when it looks wrong. LastPing
+waits for a thing to check in and tells you when it doesn't. That inversion is
+the whole product: **a job that breaks can't send you an error, but it can fail
+to send you anything** — and absence is the one signal a broken process can
+still produce.
 
-- **Crons *and* pipelines, one console.** Heartbeat monitors for cron jobs, backups, and any scheduled task — alongside first-class CI/CD monitoring. Most free tools do one or the other.
-- **It tells you *why* CI failed.** Connect a GitHub Actions workflow with a signed `workflow_run` webhook and LastPing catches failed, hung, and never-started runs — and can attach the failing log excerpt to the alert, so the incident isn't just "something broke."
-- **Alerts on the very first check.** Email works out of the box (no routing to configure). Add Telegram, Slack, Discord, or signed outbound webhooks, and route which events reach which channel per monitor.
-- **Free, with no asterisk.** No monitor caps hidden behind a paid tier.
-- **We monitor ourselves with it.** LastPing watches its own infrastructure — see the live [self-monitoring status page](https://app.lastping.dev/status/lastping-self).
+This repository holds the open-source pieces: the `lastping` CLI and the MCP
+server. The hosted service they talk to is at **[lastping.dev](https://lastping.dev)**,
+free for individuals.
 
-## Quickstart
+## Install
 
-Create a monitor in the [dashboard](https://app.lastping.dev), then have your job ping its URL when it finishes:
-
-```bash
-# At the end of your cron job / backup script:
-curl -fsS -m 10 --retry 3 https://ping.lastping.dev/your-monitor-uuid
+```sh
+curl -fsSL https://raw.githubusercontent.com/tp322d/lastping-app/main/install.sh | sh
 ```
 
-If that ping doesn't arrive within the schedule + grace window you set, LastPing opens an incident and alerts you. Signal the *start* of a long job (to catch overruns) or a hard *failure* with `/start` and `/fail` suffixes.
+No Go toolchain needed — that pulls a prebuilt binary for macOS and Linux, on
+amd64 and arm64, and verifies its checksum. Windows builds are on the
+[releases page](https://github.com/tp322d/lastping-app/releases).
 
-For GitHub Actions, point a `workflow_run` webhook at your CI monitor and LastPing tracks every run — see the [GitHub Actions guide](https://lastping.dev/monitor/github-actions/).
+If you do have Go:
 
-## What it does
+```sh
+go install github.com/tp322d/lastping-app/cmd/lastping@latest
+```
 
-- Heartbeat / dead-man's-switch monitoring (interval or cron schedules, timezone-aware, configurable grace)
-- HTTP / uptime probing
-- CI/CD pipeline monitoring via signed GitHub `workflow_run` webhooks, with failure-detail capture
-- Incidents with a full event timeline
-- Alert channels: email, Telegram, Slack, Discord, outbound webhooks — with per-monitor event routing and custom message templates
-- Public status pages and status badges
-- A full REST API (interactive [API docs](https://app.lastping.dev/docs)) — everything you can do in the UI, you can do via the API
+## `lastping run` — reporting you can't forget
 
----
+Put it in front of whatever you already run:
 
-## MCP server for AI agents (open source)
+```sh
+lastping run --monitor <monitor-id> -- python nightly_etl.py
+lastping run --monitor <monitor-id> -- ./backup.sh
+lastping run --monitor <monitor-id> -- claude
+```
 
-This repo is the home of **`lastping-mcp`** — the open-source [MCP](https://modelcontextprotocol.io) server that lets an AI agent (Claude, Cursor, Windsurf, …) create and manage LastPing monitors, query incidents, and **instrument its own dead-man's-switch in a single conversation**.
+It sends a start ping, runs your command untouched, and reports the exit code
+when it finishes — success on 0, failure on anything else, with the tail of
+stderr attached so the alert says *why*.
 
-Full documentation: [lastping.dev/mcp/](https://lastping.dev/mcp/)
+Three properties worth knowing, because they are the difference between a
+monitoring wrapper you can trust in production and one you remove after a bad
+night:
 
-### What an agent can do
+- **Your exit code always propagates.** The wrapper exits with whatever your
+  command exited with, so CI behaves exactly as it did before you added it.
+- **A failed ping never touches your command.** If LastPing is unreachable, your
+  job still runs, still writes its output, still exits normally.
+- **Interactive stays interactive.** stdin and stdout are handed over as file
+  descriptors, so wrapping a REPL or an agent session works.
 
-Once the MCP server is connected, an agent can:
+Why a wrapper rather than an instruction? Because anything advisory decays. An
+AI agent told to report on every task will stop doing it, and a cron line you
+meant to add a `curl` to never gets it. A wrapper reports from the process
+lifecycle, so nothing depends on anybody remembering.
 
-- **Create monitors** — heartbeat (cron or interval), CI/CD (pipeline signals), or HTTP/uptime — and upsert them by slug so re-runs are idempotent
-- **Instrument itself** — call `get_ping_instructions` to receive ready-to-run `curl_success`, `curl_start`, and `curl_fail` snippets; wire them into its own workflow; from that point on any silence, hang, or failure opens a LastPing incident automatically
-- **Manage its monitor lifecycle** — pause during maintenance windows (`snooze_monitor`), check status (`get_monitor`), and inspect incident history (`list_incidents`) without leaving the conversation
-- **Set up alert routing** — create a Slack, Telegram, email, or webhook destination (`create_destination`), verify it fires (`test_destination`), then route `down`/`recovery`/`fail` events to it (`set_route`)
-- **List everything** — `list_monitors`, `list_destinations`, `list_incidents` give the agent a full picture of what exists before making changes
+## MCP server — let an agent set up its own monitoring
 
-The key insight: competitors' MCP servers are positioned for *reading* pre-existing monitoring data. LastPing MCP is positioned for an agent *creating and owning* its own monitor — the agent sets up its watchdog, not a human.
-
-### The self-monitoring narrative
-
-An autonomous agent is the new cron job. It runs unattended, on a schedule or in a loop, and its worst failures are silent: the process is alive, the work has stopped. LastPing is the first monitor your agent can set up itself, in one conversation, without opening a dashboard:
-
-1. **`create_monitor`** — register a heartbeat for the task. Pass a stable `slug` so the operation is idempotent (upsert, not duplicate).
-2. **`get_ping_instructions`** — receive `curl_success`, `curl_start`, and `curl_fail` snippets for that monitor.
-3. **Wire the pings** — success ping at the end of the work; fail ping on any error path; start ping at launch to arm overrun + never-finished detection.
-
-If the agent goes silent — crash, hang, OOM, or a scheduled run that stops firing — LastPing opens an incident and alerts the operator. The agent's watchdog runs whether or not the agent is alive.
-
-### The 14 MCP tools
-
-**Monitors**
-
-| Tool | What it does |
-|---|---|
-| `create_monitor` | Create or upsert a monitor by slug (heartbeat · ci · http). Idempotent — safe for agents to retry |
-| `list_monitors` | List all monitors with id, name, slug, status, ping_url |
-| `get_monitor` | Get a single monitor's full config by UUID |
-| `update_monitor` | Update an existing monitor's schedule and config |
-| `delete_monitor` | Permanently delete a monitor |
-| `pause_monitor` | Pause alerting; monitor still receives pings but does not open incidents |
-| `resume_monitor` | Resume a paused monitor; alerting resumes on the next missed ping |
-| `snooze_monitor` | Set or clear a maintenance window (duration, RFC 3339 timestamp, or clear=true) |
-
-**Incidents**
-
-| Tool | What it does |
-|---|---|
-| `list_incidents` | List recent incidents for a monitor, newest first; open incidents have `closed_at=null` |
-
-**Destinations**
-
-| Tool | What it does |
-|---|---|
-| `list_destinations` | List all notification destinations (email, webhook, Slack, Discord, Telegram, ntfy, Pushover, Teams, Google Chat) |
-| `create_destination` | Create a notification destination; email requires confirmation before routing |
-| `test_destination` | Deliver a synthetic test alert to verify credentials |
-
-**Routing**
-
-| Tool | What it does |
-|---|---|
-| `set_route` | Route a monitor's `down` / `recovery` / `fail` alerts to a set of destinations (replaces the full set; empty clears routing) |
-
-**Self-instrumentation**
-
-| Tool | What it does |
-|---|---|
-| `get_ping_instructions` | **The flagship.** Returns the ping URL plus ready-to-run `curl_success`, `curl_start`, and `curl_fail` snippets. Call right after `create_monitor`. |
-
-### Hosted (recommended)
-
-Nothing to install. Point your MCP client at the hosted server with your API key:
-
-**Claude Desktop** (`claude_desktop_config.json`):
 ```jsonc
-{ "mcpServers": { "lastping": {
-    "url": "https://mcp.lastping.dev",
-    "headers": { "Authorization": "Bearer lp_your_key_here" } } } }
+// claude_desktop_config.json, .mcp.json, or your client's equivalent
+{
+  "mcpServers": {
+    "lastping": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://mcp.lastping.dev/mcp",
+               "--header", "Authorization: Bearer ${LASTPING_API_KEY}"],
+      "env": { "LASTPING_API_KEY": "lp__your_key_here" }
+    }
+  }
+}
 ```
 
-**Claude Code CLI** (one command, user scope):
-```bash
-claude mcp add --transport http --scope user lastping https://mcp.lastping.dev \
-  --header "Authorization: Bearer lp_…"
-```
+The hosted server is the recommended path — nothing to install, and it always
+carries the current tool set.
 
-**Cursor** (`~/.cursor/mcp.json` for user scope, or `.cursor/mcp.json` for project scope):
-```jsonc
-{ "mcpServers": { "lastping": {
-    "url": "https://mcp.lastping.dev",
-    "headers": { "Authorization": "Bearer lp_your_key_here" } } } }
-```
+A stdio binary is also here if you would rather run it yourself:
 
-**Windsurf** (`~/.codeium/windsurf/mcp_config.json` — Windsurf uses `serverUrl`):
-```jsonc
-{ "mcpServers": { "lastping": {
-    "serverUrl": "https://mcp.lastping.dev",
-    "headers": { "Authorization": "Bearer lp_your_key_here" } } } }
-```
-
-Get an API key at [app.lastping.dev](https://app.lastping.dev) → Settings → API keys.
-
-### Self-host (stdio binary)
-
-A single Go binary. No npm, no runtime dependencies. MIT-licensed.
-
-```bash
-# requires Go 1.22+
+```sh
 go install github.com/tp322d/lastping-app/cmd/lastping-mcp@latest
 ```
 
-Then configure with `command` + `env` instead of `url` + `headers`:
+<details>
+<summary><b>Tools in this repository's stdio binary (11)</b></summary>
 
-```jsonc
-{ "mcpServers": { "lastping": {
-    "command": "lastping-mcp",
-    "env": { "LASTPING_API_KEY": "lp_your_key_here" } } } }
+`create_monitor` · `get_monitor` · `list_monitors` · `update_monitor` ·
+`delete_monitor` · `pause_monitor` · `resume_monitor` · `snooze_monitor` ·
+`list_incidents` · `list_destinations` · `get_ping_instructions`
+
+The hosted server at `mcp.lastping.dev` carries a larger set, including the
+agent registry, run history, alert templates, routing and Terraform export.
+This binary is a snapshot and lags it; if you need the full surface, use the
+hosted server.
+
+</details>
+
+The one that matters most is `get_ping_instructions`: an agent calls
+`create_monitor`, then asks for its own ping commands, and wires them into its
+own work — in one conversation, without a human opening a dashboard.
+
+## Ping API
+
+Every monitor gets a URL. There is nothing to install and no library to keep
+current; anything that can make an HTTP request can report.
+
+| What happened | Request |
+|---|---|
+| finished successfully | `POST <ping-url>` |
+| started a run | `POST <ping-url>/start` |
+| failed | `POST <ping-url>/fail` with the error as the body |
+| exited with a code | `POST <ping-url>/<exit-code>` |
+| waiting on a human | `POST <ping-url>/blocked` |
+| progress worth recording | `POST <ping-url>/note` |
+
+Add `?rid=<id>` to pair a run's start with its result, so LastPing can group a
+run's pings and time it.
+
+```sh
+# The classic one-liner, at the end of a cron job:
+curl -fsS -m 10 --retry 3 https://ping.lastping.dev/<monitor-id>
 ```
 
-Optional env vars: `LASTPING_BASE_URL` (default: `https://app.lastping.dev`) and `LASTPING_PING_HOST` (default: `https://ping.lastping.dev`) — useful for self-hosted LastPing instances.
+## Monitoring as code
 
-See [`cmd/lastping-mcp/`](cmd/lastping-mcp/) (stdio binary), [`cmd/lastping-mcp-server/`](cmd/lastping-mcp-server/) (the hosted Streamable-HTTP server at `mcp.lastping.dev`), and [`cmd/lastping-mcp/AGENTS.md`](cmd/lastping-mcp/AGENTS.md) for the ping conventions and self-instrumentation flow.
+```hcl
+resource "lastping_monitor" "nightly_etl" {
+  name          = "nightly-etl"
+  slug          = "nightly-etl"
+  schedule_kind = "cron"
+  cron_expr     = "0 3 * * *"
+  tz            = "Europe/Berlin"
+  grace_s       = 900
+}
+```
 
-### Example prompts
-
-- *"Monitor my nightly Postgres backup and alert me on Telegram if it doesn't check in by 3am."*
-- *"Add a LastPing dead-man's-switch to the deploy pipeline you just wrote — daily at midnight, 30-minute grace."*
-- *"Create a monitor for this nightly summary agent — runs at 2am UTC, alert me on Slack if it goes silent."*
-- *"Check all my monitors. Which ones have had incidents in the past week?"*
-- *"Snooze the nightly-backup monitor for 4 hours while I run a maintenance window."*
-- *"Instrument yourself: register a heartbeat for this agent at '0 6 * * *' (6am daily, 45-minute grace), get the ping snippets, and add them to your run loop."*
-
-### Ping conventions
-
-Once a monitor exists, pinging it is plain HTTP — no SDK, no import:
-
-- `GET https://ping.lastping.dev/<uuid>` — success / "I'm alive"
-- `.../start` — run began (enables overrun + never-finished detection)
-- `.../fail` — run failed (POST error/log body as `text/plain`, up to 64 KB — stored on the incident)
-- `.../<exit-code>` — 0 = success, non-zero = fail
-- `...?rid=<run-id>` — pair a start with its later success/fail and record run duration
-
----
-
-## Free & hosted
-
-LastPing is **free and fully hosted** today — just sign up at [lastping.dev](https://lastping.dev). This repository is the project's public home (announcements, docs links, issues); the application is operated as a hosted service.
+The provider is on the
+[Terraform Registry](https://registry.terraform.io/providers/lastping-dev/lastping/latest)
+as `lastping-dev/lastping`, with source at
+[lastping-dev/terraform-provider-lastping](https://github.com/lastping-dev/terraform-provider-lastping).
 
 ## Links
 
-- Site: https://lastping.dev
-- App: https://app.lastping.dev
-- MCP server: https://lastping.dev/mcp/
-- Docs / API reference: https://app.lastping.dev/docs
-- Monitor GitHub Actions: https://lastping.dev/monitor/github-actions/
-- vs Healthchecks: https://lastping.dev/vs/healthchecks/ · vs Cronitor: https://lastping.dev/vs/cronitor/
+- **[lastping.dev](https://lastping.dev)** — the hosted service, free for individuals
+- **[AI agent monitoring](https://lastping.dev/agents/)** — the agent-first guide
+- **[MCP server](https://lastping.dev/mcp/)** — connect configs per client
+- **[Terraform provider](https://lastping.dev/terraform)** — monitoring as code
+- **[Integration guides](https://lastping.dev/monitor/)** — cron, Kubernetes, systemd, GitHub Actions, Python, Node
 
-<!-- TODO(design): add dashboard + CI-failure-detail screenshots here (task #49) -->
+## License
+
+MIT. See [LICENSE](LICENSE).

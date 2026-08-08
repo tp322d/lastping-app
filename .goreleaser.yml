@@ -1,0 +1,73 @@
+# Release configuration for the `lastping` CLI.
+#
+# The point of this file is that installing must not require a Go toolchain.
+# `go install` works and is documented, but it is a developer's install path --
+# most people running a cron job or a CI step do not have Go, and telling them
+# to install a language runtime to get a monitoring wrapper loses them at the
+# first step. Everything here exists to make `curl | sh` produce a working
+# binary on the platforms people actually run agents and jobs on.
+#
+# Validate with `goreleaser check` and dry-run with
+# `goreleaser release --snapshot --clean --skip=publish`.
+version: 2
+
+builds:
+  - id: lastping
+    main: ./cmd/lastping
+    binary: lastping
+    env:
+      - CGO_ENABLED=0
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags:
+      - -trimpath
+    ldflags:
+      - '-s -w -X main.version={{.Version}}'
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # No 32-bit and no windows/arm64: nobody is running a monitoring wrapper
+      # on those, and every extra artifact is one more thing the install script
+      # has to name correctly.
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: lastping
+    # A predictable name is a hard requirement, not a preference: install.sh
+    # constructs this string from `uname`, so a change here silently breaks
+    # every documented install command.
+    name_template: 'lastping_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - src: cmd/lastping/README.md
+        dst: README.md
+
+checksums:
+  name_template: 'lastping_{{ .Version }}_SHA256SUMS'
+
+# No signing. The Terraform provider signs because the registry rejects
+# unsigned releases; a CLI has no such gate, and a GPG key that nobody
+# verifies is ceremony rather than security. The checksums file is published
+# so an install can be verified by anyone who wants to.
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+
+release:
+  draft: false
+  prerelease: auto

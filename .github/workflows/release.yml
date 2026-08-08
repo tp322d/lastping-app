@@ -1,0 +1,37 @@
+name: Release
+
+# Tag-driven. The point of publishing archives at all is that installing must
+# not require a Go toolchain, so every tag produces binaries for the platforms
+# install.sh knows how to ask for.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      # Build and test before publishing: a tag that ships a broken binary is
+      # worse than a tag that fails.
+      - run: go build ./...
+      - run: go test ./... -count=1
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
