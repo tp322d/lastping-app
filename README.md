@@ -1,22 +1,7 @@
 <div align="center">
 
-```
-   ██       █████  ███████ ████████ ██████  ██ ███    ██  ██████
-   ██      ██   ██ ██         ██    ██   ██ ██ ████   ██ ██
-   ██      ███████ ███████    ██    ██████  ██ ██ ██  ██ ██   ███
-   ██      ██   ██      ██    ██    ██      ██ ██  ██ ██ ██    ██
-   ███████ ██   ██ ███████    ██    ██      ██ ██   ████  ██████
+<img src=".github/banner.svg" alt="LastPing" width="100%">
 
-   ─────────╮ ╭──────────────╮ ╭─────────╮ ╭────────────────────
-            ╰─╯              ╰─╯          ╰─╯
-   still reporting                                    ↑ every run
-   ──────────────────────────────────────────────────────────────
-   nothing.                                    ↑ that's the alert
-```
-
-**The dead man's switch for everything that runs without you.**
-
-Cron jobs · backups · CI/CD pipelines · AI agents
 
 [![MIT](https://img.shields.io/badge/license-MIT-0f766e)](LICENSE)
 [![Go](https://img.shields.io/badge/go-1.26-0f766e)](go.mod)
