@@ -51,7 +51,9 @@ archives:
       - src: cmd/lastping/README.md
         dst: README.md
 
-checksums:
+# Singular. goreleaser v2 rejects `checksums:` outright, which is how the
+# first tag failed.
+checksum:
   name_template: 'lastping_{{ .Version }}_SHA256SUMS'
 
 # No signing. The Terraform provider signs because the registry rejects

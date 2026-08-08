@@ -1,2 +1,3 @@
-# nothing to ignore — this is a docs/marketing repo
+# Build output. This repo ships real binaries now, not just docs.
 .DS_Store
+dist/
