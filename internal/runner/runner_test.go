@@ -578,7 +578,7 @@ func TestRandomRIDShape(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		rid := randomRID()
 		if len(rid) != 8 {
-			t.Fatalf("rid %q is %d chars, want 8 — the shape internal/agentprompt teaches", rid, len(rid))
+			t.Fatalf("rid %q is %d chars, want 8 — the shape LastPing's own onboarding instructions recommend", rid, len(rid))
 		}
 		if _, err := url.QueryUnescape(rid); err != nil {
 			t.Fatalf("rid %q is not URL-safe: %v", rid, err)

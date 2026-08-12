@@ -153,11 +153,25 @@ func TestListMonitors(t *testing.T) {
 // --- get_monitor ---
 
 func TestGetMonitor(t *testing.T) {
-	var capturedPath string
+	// get_monitor also splices in the monitor's assertions, guards and routes
+	// sub-resources (see getMonitor in checks.go), so the stub server must
+	// answer all four paths it hits.
+	var capturedPaths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedPath = r.URL.Path
+		capturedPaths = append(capturedPaths, r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"abc-123","name":"Job 1","slug":"job-1","status":"up","ping_url":"https://ping.lastping.dev/abc-123","schedule_kind":"simple","period_s":3600,"grace_s":300,"paused":false,"created_at":"2026-07-17T00:00:00Z"}`))
+		switch r.URL.Path {
+		case "/api/v1/checks/abc-123":
+			_, _ = w.Write([]byte(`{"id":"abc-123","name":"Job 1","slug":"job-1","status":"up","ping_url":"https://ping.lastping.dev/abc-123","schedule_kind":"simple","period_s":3600,"grace_s":300,"paused":false,"created_at":"2026-07-17T00:00:00Z"}`))
+		case "/api/v1/checks/abc-123/assertions":
+			_, _ = w.Write([]byte(`{"assertions":[]}`))
+		case "/api/v1/checks/abc-123/guards":
+			_, _ = w.Write([]byte(`{"guards":[]}`))
+		case "/api/v1/checks/abc-123/routes":
+			_, _ = w.Write([]byte(`[]`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
 	}))
 	defer srv.Close()
 
@@ -166,7 +180,10 @@ func TestGetMonitor(t *testing.T) {
 
 	result := callTool(t, s, c, "get_monitor", map[string]interface{}{"id": "abc-123"})
 	assert.False(t, result.IsError)
-	assert.Equal(t, "/api/v1/checks/abc-123", capturedPath)
+	assert.Contains(t, capturedPaths, "/api/v1/checks/abc-123")
+	assert.Contains(t, capturedPaths, "/api/v1/checks/abc-123/assertions")
+	assert.Contains(t, capturedPaths, "/api/v1/checks/abc-123/guards")
+	assert.Contains(t, capturedPaths, "/api/v1/checks/abc-123/routes")
 }
 
 // --- update_monitor ---

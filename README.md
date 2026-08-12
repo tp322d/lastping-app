@@ -94,16 +94,37 @@ go install github.com/tp322d/lastping-app/cmd/lastping-mcp@latest
 ```
 
 <details>
-<summary><b>Tools in this repository's stdio binary (11)</b></summary>
+<summary><b>Tools in this repository's stdio binary (32)</b></summary>
 
-`create_monitor` · `get_monitor` · `list_monitors` · `update_monitor` ·
-`delete_monitor` · `pause_monitor` · `resume_monitor` · `snooze_monitor` ·
-`list_incidents` · `list_destinations` · `get_ping_instructions`
+Monitors: `create_monitor` · `get_monitor` · `list_monitors` ·
+`update_monitor` · `delete_monitor` · `pause_monitor` · `resume_monitor` ·
+`snooze_monitor`
 
-The hosted server at `mcp.lastping.dev` carries a larger set, including the
-agent registry, run history, alert templates, routing and Terraform export.
-This binary is a snapshot and lags it; if you need the full surface, use the
-hosted server.
+Reporting: `get_ping_instructions`
+
+Incidents & runs: `list_incidents` · `get_run_history`
+
+Alert routing: `set_route`
+
+Destinations: `list_destinations` · `create_destination` ·
+`update_destination` · `test_destination` · `delete_destination`
+
+Alert templates: `get_alert_templates` · `set_alert_template`
+
+Agent registry: `register_agent` · `list_agents` · `get_agent` ·
+`update_agent` · `delete_agent`
+
+Status pages: `list_status_pages` · `create_status_page` ·
+`update_status_page` · `delete_status_page`
+
+API keys: `create_api_key` · `list_api_keys` · `revoke_api_key`
+
+Terraform: `export_terraform`
+
+This binary carries the same tool set as the hosted server at
+`mcp.lastping.dev`. It is a thin REST client throughout: every tool is a
+direct HTTP call to the management API, so it stays free to run yourself with
+no lag behind the hosted surface beyond a new release.
 
 </details>
 

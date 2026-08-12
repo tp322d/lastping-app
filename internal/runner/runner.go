@@ -3,14 +3,14 @@
 //
 // # WHY THIS EXISTS
 //
-// internal/agentprompt.Build asks an agent to report on every task, forever.
-// That is a continuous obligation and it decays (observed 2026-08-08: an agent
-// with the block correctly persisted reported nothing for an hour of work while
-// its monitor read "up"). BuildHookInstall fixes that for tools that fire hooks.
-// This wrapper fixes it for everything else, and fixes it harder: nothing in the
-// reporting path depends on the wrapped program cooperating, knowing about
-// LastPing, or even being an agent. If the process ran, the run is reported; if
-// it exited, the run is closed.
+// Asking an agent to report on every task, forever, is a continuous
+// obligation, and it decays (observed 2026-08-08: an agent given that
+// instruction, correctly, still reported nothing for an hour of work while
+// its monitor read "up"). A one-time hook install fixes that for tools that
+// fire hooks. This wrapper fixes it for everything else, and fixes it
+// harder: nothing in the reporting path depends on the wrapped program
+// cooperating, knowing about LastPing, or even being an agent. If the
+// process ran, the run is reported; if it exited, the run is closed.
 //
 // On an on_demand monitor core/check.recomputeDeadlines arms no deadline
 // between runs, so a lapsed agent is indistinguishable from an idle one — a
@@ -108,8 +108,8 @@ type Options struct {
 	// still receives terminal-generated signals via the process group, because
 	// Run never puts it in a new one).
 	Signals <-chan os.Signal
-	// NewRID mints the run id. Nil means 8 random hex characters, the same shape
-	// internal/agentprompt teaches.
+	// NewRID mints the run id. Nil means 8 random hex characters, the same
+	// shape LastPing's own onboarding instructions recommend for a run id.
 	NewRID func() string
 	// Env, when non-nil, replaces the child's environment. Nil inherits ours.
 	Env []string
@@ -357,11 +357,11 @@ func startFailureExitCode(err error) int {
 	return exitNotFound
 }
 
-// randomRID returns 8 hex characters, matching the run-id shape
-// internal/agentprompt teaches ("8 hex characters is plenty"). On the
+// randomRID returns 8 hex characters — "8 hex characters is plenty" is the
+// shape LastPing's own onboarding instructions recommend for a run id. On the
 // vanishingly unlikely read failure it falls back to the clock rather than
 // returning an empty rid: an unpaired ping is worse than a slightly less random
-// one, because core/check pairs start with success by rid.
+// one, because a start is paired with its success by rid.
 func randomRID() string {
 	var b [4]byte
 	if _, err := rand.Read(b[:]); err != nil {

@@ -57,11 +57,17 @@ Claude Desktop (`claude_desktop_config.json`), Cursor, or a project `.mcp.json`:
 }
 ```
 
-## Tools
+## Tools (32)
 
 **Monitors:** `create_monitor` (upsert by slug) · `list_monitors` · `get_monitor` · `update_monitor` · `delete_monitor` · `pause_monitor` · `resume_monitor` · `snooze_monitor`
-**Incidents:** `list_incidents` · `get_incident`
-**Destinations:** `list_destinations`
+**Incidents & runs:** `list_incidents` · `get_run_history`
+**Alert routing:** `set_route`
+**Destinations:** `list_destinations` · `create_destination` · `update_destination` · `test_destination` · `delete_destination`
+**Alert templates:** `get_alert_templates` · `set_alert_template`
+**Agent registry:** `register_agent` · `list_agents` · `get_agent` · `update_agent` · `delete_agent`
+**Status pages:** `list_status_pages` · `create_status_page` · `update_status_page` · `delete_status_page`
+**API keys:** `create_api_key` · `list_api_keys` · `revoke_api_key`
+**Terraform:** `export_terraform`
 **Self-instrumentation:** **`get_ping_instructions`** — returns a monitor's ping URL plus ready-to-run success / start / fail snippets, so the agent can make the monitored job actually check in.
 
 ## The flow that makes agents self-monitoring

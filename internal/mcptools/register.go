@@ -10,5 +10,11 @@ func Register(s *server.MCPServer, pingHost string) {
 	registerCheckTools(s)
 	registerIncidentTools(s)
 	registerChannelTools(s)
+	registerRouteTools(s)
+	registerStatusPageTools(s)
 	registerPingTools(s, pingHost)
+	registerTemplateTools(s)
+	registerAPIKeyTools(s)
+	registerExportTools(s)
+	registerAgentTools(s)
 }
