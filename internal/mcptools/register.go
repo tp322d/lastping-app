@@ -17,4 +17,5 @@ func Register(s *server.MCPServer, pingHost string) {
 	registerAPIKeyTools(s)
 	registerExportTools(s)
 	registerAgentTools(s)
+	registerRunExpectationTools(s)
 }
