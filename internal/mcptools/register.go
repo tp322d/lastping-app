@@ -18,4 +18,5 @@ func Register(s *server.MCPServer, pingHost string) {
 	registerExportTools(s)
 	registerAgentTools(s)
 	registerRunExpectationTools(s)
+	registerFailureInboxTools(s)
 }

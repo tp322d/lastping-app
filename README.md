@@ -94,15 +94,17 @@ go install github.com/tp322d/lastping-app/cmd/lastping-mcp@latest
 ```
 
 <details>
-<summary><b>Tools in this repository's stdio binary (32)</b></summary>
+<summary><b>Tools in this repository's stdio binary (35)</b></summary>
 
 Monitors: `create_monitor` · `get_monitor` · `list_monitors` ·
 `update_monitor` · `delete_monitor` · `pause_monitor` · `resume_monitor` ·
 `snooze_monitor`
 
-Reporting: `get_ping_instructions`
+Reporting: `get_ping_instructions` · `declare_run_expectations`
 
 Incidents & runs: `list_incidents` · `get_run_history`
+
+The failure loop: `list_open_incidents` · `add_incident_note`
 
 Alert routing: `set_route`
 
