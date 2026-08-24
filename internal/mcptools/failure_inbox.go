@@ -95,9 +95,9 @@ const addIncidentNoteDesc = "Write back, in your own words, what you found out a
 	"incident is indistinguishable from one nobody has looked at yet, so an agent that writes back only its successes leaves a " +
 	"record worse than none: every unexplained incident then reads as 'not looked at yet' when it may equally mean 'looked at and " +
 	"gave up'. 'Could not reproduce; gave up after two attempts' IS a finding and is worth writing. " +
-	"NOTES ARE APPEND-ONLY. There is no way to edit a note and no way to delete one — not merely unexposed, but refused by the " +
-	"database itself. A correction is a new note, never an edit, because a diagnosis whose history a reader cannot trust is not " +
-	"evidence. " +
+	"NOTES ARE APPEND-ONLY. There is no way to edit a note and no way to delete one — not merely unexposed: no route and no query " +
+	"exists for either, and an edit is refused by the database itself. A correction is a new note, never an edit, because a " +
+	"diagnosis whose history a reader cannot trust is not evidence. " +
 	"This is NOT a write-once resource: a second, third or tenth note on the same incident is normal and expected, and there is no " +
 	"conflict for writing one. The only conflict this tool has is the cap of 50 notes per incident, and reaching it means something " +
 	"is looping rather than diagnosing. " +
