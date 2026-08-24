@@ -57,10 +57,11 @@ Claude Desktop (`claude_desktop_config.json`), Cursor, or a project `.mcp.json`:
 }
 ```
 
-## Tools (32)
+## Tools (35)
 
 **Monitors:** `create_monitor` (upsert by slug) · `list_monitors` · `get_monitor` · `update_monitor` · `delete_monitor` · `pause_monitor` · `resume_monitor` · `snooze_monitor`
 **Incidents & runs:** `list_incidents` · `get_run_history`
+**The failure loop:** `list_open_incidents` — the agent's inbox: every incident currently open on the monitors it owns, newest first, carrying facts a single run cannot know on its own (`failure_signature.occurrences`, the failing step, the exit code, duration vs. normal). A missing enrichment means *no evidence*, never "normal" and never "exited cleanly". · `add_incident_note` — writes the agent's diagnosis back onto the incident a human reads, whether or not it could fix the problem. Append-only: a correction is a new note, never an edit.
 **Alert routing:** `set_route`
 **Destinations:** `list_destinations` · `create_destination` · `update_destination` · `test_destination` · `delete_destination`
 **Alert templates:** `get_alert_templates` · `set_alert_template`
@@ -68,7 +69,7 @@ Claude Desktop (`claude_desktop_config.json`), Cursor, or a project `.mcp.json`:
 **Status pages:** `list_status_pages` · `create_status_page` · `update_status_page` · `delete_status_page`
 **API keys:** `create_api_key` · `list_api_keys` · `revoke_api_key`
 **Terraform:** `export_terraform`
-**Self-instrumentation:** **`get_ping_instructions`** — returns a monitor's ping URL plus ready-to-run success / start / fail snippets, so the agent can make the monitored job actually check in.
+**Self-instrumentation:** **`get_ping_instructions`** — returns a monitor's ping URL plus ready-to-run success / start / fail snippets, so the agent can make the monitored job actually check in. · `declare_run_expectations` — commit, at the *start* of a run, to the criteria that run will be judged by, before the outcome is knowable. Immutable once declared.
 
 ## The flow that makes agents self-monitoring
 

@@ -47,6 +47,9 @@ var wantTools = []string{
 	"snooze_monitor",
 	// export.go (1)
 	"export_terraform",
+	// failure_inbox.go (2)
+	"list_open_incidents",
+	"add_incident_note",
 	// incidents.go (2)
 	"list_incidents",
 	"get_run_history",
@@ -66,14 +69,14 @@ var wantTools = []string{
 	"set_alert_template",
 }
 
-// TestGoldenToolCount_Is33 is the regression guard for tool parity with the
+// TestGoldenToolCount_Is35 is the regression guard for tool parity with the
 // hosted MCP server. It fails if a tool is dropped or added without updating
 // wantTools above.
-func TestGoldenToolCount_Is33(t *testing.T) {
-	require.Len(t, wantTools, 33, "wantTools itself must list exactly 33 tools — update it deliberately, alongside internal/mcptools, when parity changes")
+func TestGoldenToolCount_Is35(t *testing.T) {
+	require.Len(t, wantTools, 35, "wantTools itself must list exactly 35 tools — update it deliberately, alongside internal/mcptools, when parity changes")
 
 	got := registeredToolNames(t)
-	require.Len(t, got, 33, "the server must register exactly 33 tools")
+	require.Len(t, got, 35, "the server must register exactly 35 tools")
 
 	want := append([]string(nil), wantTools...)
 	sort.Strings(want)
