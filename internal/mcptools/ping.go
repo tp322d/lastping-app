@@ -47,7 +47,11 @@ func registerPingTools(s *server.MCPServer, pingHost string) {
 				"that it reports the process's own lifecycle (start, success, fail, cancel) and has no way to send blocked or note. "+
 				"Whichever you choose, the underlying protocol is the same: the success ping at the END of the work, the fail URL if it failed, "+
 				"the start ping first for long or possibly-hung runs (this enables overrun / never-finished detection), "+
-				"and a step (curl_step) as each stage completes so a run that wedges mid-way is caught by name rather than only when its whole budget expires."),
+				"and a step (curl_step) as each stage completes so a run that wedges mid-way is caught by name rather than only when its whole budget expires. "+
+				"Also read `expectations_how_to`: before you start work, use declare_run_expectations to say how THIS run should be judged when it closes — "+
+				"a one-time, unchangeable commitment that replaces the run grading itself. "+
+				"And `discovery_how_to`, which is about the OTHER jobs on this host or in this repo: how to find the scheduled work nobody is watching yet "+
+				"and propose it, rather than monitoring only the one thing you were asked about."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID (from create_monitor or list_monitors)."))),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -124,6 +128,34 @@ type PingInstructions struct {
 	// fallback ranked behind the other two.
 	HowTo      string `json:"how_to"`
 	HowToSteps string `json:"how_to_steps"`
+	// ExpectationsHowTo mirrors the API struct's ExpectationsHowTo verbatim:
+	// how to use declare_run_expectations to commit, before the work starts, to
+	// the criteria this run will be judged by. Declared here, byte-for-byte
+	// matching, for the same reason every other field on this struct is: an MCP
+	// client decodes this exact shape.
+	ExpectationsHowTo string `json:"expectations_how_to"`
+	// FailureInboxHowTo mirrors the API struct's FailureInboxHowTo verbatim:
+	// how to read the agent's open-incident inbox and write a diagnosis back.
+	// Declared here, byte-for-byte matching, for the same reason every other
+	// field on this struct is: an MCP client decodes this exact shape. Dropping
+	// this field silently truncates the JSON this proxy decodes-and-re-renders
+	// (see marshalSnippets), which is exactly how it went missing before --
+	// this struct fell out of sync with the API's struct after
+	// FailureInboxHowTo was added there.
+	FailureInboxHowTo string `json:"failure_inbox_how_to"`
+	// DiscoveryHowTo mirrors the API struct's DiscoveryHowTo verbatim: how to
+	// find the scheduled work on this host or in this repo that nobody is
+	// watching yet, and propose it -- a project-scoped instruction served from
+	// a check-scoped payload, because this is the payload an agent already
+	// reads.
+	//
+	// There is no compiler check that this mirror still matches the API's
+	// struct and there cannot be one, since the two live in repositories that
+	// must not share code; the guard is
+	// TestGetPingInstructions_IncludesEveryHowToField, which decodes the
+	// rendered output into a generic map so a dropped field fails on a missing
+	// key rather than passing on both sides equally.
+	DiscoveryHowTo string `json:"discovery_how_to"`
 }
 
 // getPingInstructions proxies to GET /api/v1/checks/{id}/ping-instructions

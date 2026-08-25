@@ -57,9 +57,10 @@ Claude Desktop (`claude_desktop_config.json`), Cursor, or a project `.mcp.json`:
 }
 ```
 
-## Tools (35)
+## Tools (36)
 
 **Monitors:** `create_monitor` (upsert by slug) · `list_monitors` · `get_monitor` · `update_monitor` · `delete_monitor` · `pause_monitor` · `resume_monitor` · `snooze_monitor`
+**Discovery:** `discover_monitors_reconcile` — turns a scan of a repository or a host into monitors: send every scheduled job you found, get back a three-way diff of what was created, what already existed, and what has gone missing. Scanning is agent-side; LastPing never reads your repository. Propose what you found to the user before calling — it *creates* monitors. It never deletes, pauses or edits anything, which is what makes it safe to re-run on a schedule as drift detection rather than a one-off setup step.
 **Incidents & runs:** `list_incidents` · `get_run_history`
 **The failure loop:** `list_open_incidents` — the agent's inbox: every incident currently open on the monitors it owns, newest first, carrying facts a single run cannot know on its own (`failure_signature.occurrences`, the failing step, the exit code, duration vs. normal). A missing enrichment means *no evidence*, never "normal" and never "exited cleanly". · `add_incident_note` — writes the agent's diagnosis back onto the incident a human reads, whether or not it could fix the problem. Append-only: a correction is a new note, never an edit.
 **Alert routing:** `set_route`
