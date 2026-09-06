@@ -13,7 +13,7 @@ import (
 const (
 	defaultBaseURL  = "https://app.lastping.dev"
 	defaultPingHost = "https://ping.lastping.dev"
-	version         = "0.1.0"
+	version         = "0.1.1"
 )
 
 func main() {

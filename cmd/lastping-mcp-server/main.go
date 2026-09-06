@@ -27,7 +27,7 @@ const (
 	defaultAPIBase  = "https://app.lastping.dev"
 	defaultPingHost = "https://ping.lastping.dev"
 	defaultPort     = "8080"
-	version         = "0.1.0"
+	version         = "0.1.1"
 
 	// bearerRatePerMin caps requests per API key per minute — a generous ceiling
 	// for interactive agent use; abusive callers get 429 + Retry-After.
