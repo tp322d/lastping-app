@@ -159,7 +159,7 @@ func reconcileProblemText(resp *http.Response) string {
 // registerDiscoveryTools registers discover_monitors_reconcile.
 func registerDiscoveryTools(s *server.MCPServer) {
 	s.AddTool(
-		mcp.NewTool("discover_monitors_reconcile",
+		newTool("discover_monitors_reconcile",
 			mcp.WithDescription(discoverReconcileDesc),
 			mcp.WithString("sources", mcp.Required(), mcp.Description(discoverReconcileSourcesDesc)),
 		),

@@ -54,7 +54,7 @@ type AgentRegistration struct {
 func registerAgentTools(s *server.MCPServer) {
 	// register_agent
 	s.AddTool(
-		mcp.NewTool("register_agent",
+		newTool("register_agent",
 			mcp.WithDescription("Register a new autonomous agent in the project's agent registry, returning its id, slug and wire-up "+
 				"instructions in one call — so an agent can go from nothing to reporting in a single conversation. "+
 				"Call this ONCE per autonomous worker, not once per monitor. "+
@@ -80,7 +80,7 @@ func registerAgentTools(s *server.MCPServer) {
 
 	// list_agents
 	s.AddTool(
-		mcp.NewTool("list_agents",
+		newTool("list_agents",
 			mcp.WithDescription("List all agents registered in the project. Returns id, slug, name, status, monitor_count and last_seen "+
 				"for each. status is rolled up live from the monitors the agent owns, worst first: down (a monitor is down), "+
 				"blocked (a monitor's run needs a human right now), late (a monitor is late), running (a monitor's run is in "+
@@ -97,7 +97,7 @@ func registerAgentTools(s *server.MCPServer) {
 
 	// get_agent
 	s.AddTool(
-		mcp.NewTool("get_agent",
+		newTool("get_agent",
 			mcp.WithDescription("Get a single LastPing agent by UUID. Returns the same fields as list_agents, including its live "+
 				"status rollup. Use list_agents to find valid IDs, or register_agent to create one."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Agent UUID (from register_agent or list_agents)."))),
@@ -116,7 +116,7 @@ func registerAgentTools(s *server.MCPServer) {
 
 	// update_agent
 	s.AddTool(
-		mcp.NewTool("update_agent",
+		newTool("update_agent",
 			mcp.WithDescription("Update an existing LastPing agent's name/description by UUID using merge-patch semantics: only the "+
 				"fields you supply are changed, and any field you omit keeps its current stored value. slug is derived from name at "+
 				"creation and is immutable — this can rename the agent's display name, but never its slug, so anything that already "+
@@ -142,7 +142,7 @@ func registerAgentTools(s *server.MCPServer) {
 
 	// delete_agent
 	s.AddTool(
-		mcp.NewTool("delete_agent",
+		newTool("delete_agent",
 			mcp.WithDescription("Permanently delete a LastPing agent from the registry by UUID. THIS DOES NOT DELETE ITS MONITORS: "+
 				"the agent_id foreign key on a monitor is ON DELETE SET NULL, so every monitor this agent owned survives the delete "+
 				"with its ping history and incidents completely intact — it just becomes unowned (agent_id cleared to null) and keeps "+

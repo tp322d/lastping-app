@@ -53,7 +53,7 @@ func registerStatusPageTools(s *server.MCPServer) {
 		"An empty value is legal and produces a page with no monitors on it."
 
 	s.AddTool(
-		mcp.NewTool("list_status_pages",
+		newTool("list_status_pages",
 			mcp.WithDescription("List the project's status pages: id, slug, title, the monitors on each, visibility, and the public URL of any public page. "+
 				"A status page is how a monitor's health is shown to people who are not in the project — customers, or another team. "+
 				"This is also the read you need before update_status_page, because its check_ids REPLACE the page's monitor set."),
@@ -68,7 +68,7 @@ func registerStatusPageTools(s *server.MCPServer) {
 	)
 
 	s.AddTool(
-		mcp.NewTool("create_status_page",
+		newTool("create_status_page",
 			mcp.WithDescription("Create a status page — a single page showing the current status and recent history of a chosen set of monitors. "+
 				"Reach for this when the health of a monitor needs to be visible to someone who cannot log in to the project. "+
 				"Pages are PRIVATE unless you ask for otherwise; read the visibility parameter before making one public."),
@@ -90,7 +90,7 @@ func registerStatusPageTools(s *server.MCPServer) {
 	)
 
 	s.AddTool(
-		mcp.NewTool("update_status_page",
+		newTool("update_status_page",
 			mcp.WithDescription("Update a status page's title, slug, visibility, or the set of monitors on it. Only the arguments you pass are changed; "+
 				"anything you omit keeps its current value (this tool reads the page first and merges, so omitting check_ids can never blank the page). "+
 				"check_ids, when you DO pass it, REPLACES the whole monitor set — to add one monitor, pass the existing ids plus the new one, "+
@@ -118,7 +118,7 @@ func registerStatusPageTools(s *server.MCPServer) {
 	)
 
 	s.AddTool(
-		mcp.NewTool("delete_status_page",
+		newTool("delete_status_page",
 			mcp.WithDescription("Permanently delete a status page. This cannot be undone, and any public URL it had stops working immediately. "+
 				"The monitors on the page are NOT affected — they keep running and alerting exactly as before; only the shared view of them is removed. "+
 				"To stop sharing without losing the page, set visibility to 'private' with update_status_page instead."),

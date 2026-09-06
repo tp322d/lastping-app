@@ -25,7 +25,7 @@ type Channel struct {
 
 func registerChannelTools(s *server.MCPServer) {
 	s.AddTool(
-		mcp.NewTool("list_destinations",
+		newTool("list_destinations",
 			mcp.WithDescription("List all notification destinations (channels) in the project: email, webhook, Slack, Discord, Telegram. "+
 				"Use channel IDs to configure routing rules for monitors.")),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -38,7 +38,7 @@ func registerChannelTools(s *server.MCPServer) {
 	)
 
 	s.AddTool(
-		mcp.NewTool("create_destination",
+		newTool("create_destination",
 			mcp.WithDescription("Create a notification destination (channel) that monitors can route alerts to. "+
 				"Provide the fields for the chosen kind; unrelated fields are ignored. Non-email kinds are usable "+
 				"immediately; email kinds are created unverified and send a confirmation link that must be clicked "+
@@ -65,7 +65,7 @@ func registerChannelTools(s *server.MCPServer) {
 	)
 
 	s.AddTool(
-		mcp.NewTool("update_destination",
+		newTool("update_destination",
 			mcp.WithDescription("Update a notification destination's name and/or config in place. Only the fields you pass are changed. "+
 				"The destination kind cannot be changed — delete and recreate instead. Changing an email destination's address "+
 				"resets verification and sends a new confirmation email."),
@@ -96,7 +96,7 @@ func registerChannelTools(s *server.MCPServer) {
 	// the one a test alert cannot reach. Splitting them would add a tool whose
 	// only distinguishing feature is which of two sends it performs.
 	s.AddTool(
-		mcp.NewTool("test_destination",
+		newTool("test_destination",
 			mcp.WithDescription("Send something through a destination right now, to move it from 'created' to 'known to work'. "+
 				"By default it delivers a synthetic 'LastPing test alert' immediately — use that after create_destination to confirm the credentials are right. "+
 				"For an EMAIL destination that is still unverified, a test alert is not what you need: an unverified email cannot be attached to a route at all, "+
@@ -132,7 +132,7 @@ func registerChannelTools(s *server.MCPServer) {
 	// where an agent could create a destination through MCP and then had no way
 	// to remove it.
 	s.AddTool(
-		mcp.NewTool("delete_destination",
+		newTool("delete_destination",
 			mcp.WithDescription("Permanently delete a notification destination (channel). This cannot be undone. "+
 				"It also removes the destination from every monitor's routing — any event type routed ONLY to this destination stops notifying anyone, "+
 				"silently and with no incident to show for it. Before deleting a destination that is in use, check which monitors route to it "+

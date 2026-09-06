@@ -37,7 +37,7 @@ type APIKey struct {
 
 func registerAPIKeyTools(s *server.MCPServer) {
 	s.AddTool(
-		mcp.NewTool("create_api_key",
+		newTool("create_api_key",
 			mcp.WithDescription("Create a new LastPing API key. The plaintext key is returned "+
 				"ONCE and cannot be retrieved again — store it immediately in a secret manager. "+
 				"Set expires_at for a short-lived key."),
@@ -61,7 +61,7 @@ func registerAPIKeyTools(s *server.MCPServer) {
 	)
 
 	s.AddTool(
-		mcp.NewTool("list_api_keys",
+		newTool("list_api_keys",
 			mcp.WithDescription("List all API keys in the project. Never returns plaintext key "+
 				"values — only the non-secret prefix, which is enough to identify a key for "+
 				"revoke_api_key. Each key includes last_used_at and last_used_surface (which "+
@@ -80,7 +80,7 @@ func registerAPIKeyTools(s *server.MCPServer) {
 	)
 
 	s.AddTool(
-		mcp.NewTool("revoke_api_key",
+		newTool("revoke_api_key",
 			mcp.WithDescription("Permanently revoke an API key. The key stops authenticating "+
 				"immediately. This cannot be undone — a new key must be created to replace it."),
 			mcp.WithString("api_key_id", mcp.Required(),

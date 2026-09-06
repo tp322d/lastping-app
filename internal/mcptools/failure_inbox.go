@@ -119,7 +119,7 @@ const addIncidentNoteBodyDesc = "The diagnosis, in plain words and one or two se
 // add_incident_note.
 func registerFailureInboxTools(s *server.MCPServer) {
 	s.AddTool(
-		mcp.NewTool("list_open_incidents",
+		newTool("list_open_incidents",
 			mcp.WithDescription(listOpenIncidentsDesc),
 			mcp.WithString("agent_id", mcp.Required(),
 				mcp.Description("Agent UUID (from register_agent or list_agents). The inbox covers every monitor this agent owns.")),
@@ -144,7 +144,7 @@ func registerFailureInboxTools(s *server.MCPServer) {
 	)
 
 	s.AddTool(
-		mcp.NewTool("add_incident_note",
+		newTool("add_incident_note",
 			mcp.WithDescription(addIncidentNoteDesc),
 			mcp.WithNumber("incident_id", mcp.Required(),
 				mcp.Description("The incident's numeric id, taken straight from an entry's incident_id in list_open_incidents. An integer, not a UUID.")),

@@ -29,7 +29,7 @@ import (
 // instrument its own dead-man's-switch in a single conversation.
 func registerPingTools(s *server.MCPServer, pingHost string) {
 	s.AddTool(
-		mcp.NewTool("get_ping_instructions",
+		newTool("get_ping_instructions",
 			mcp.WithDescription("Get everything needed to make a monitor actually report: the ping URL, copy-paste check-in snippets, and the three "+
 				"MECHANISMS for reporting, returned together. Call this right after create_monitor. "+
 				"CHOOSE BY WHAT THE MONITORED THING IS — read `reporting_options` first and pick by that, rather than defaulting to the raw curl list: "+
