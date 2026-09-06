@@ -20,7 +20,7 @@ type Incident struct {
 
 func registerIncidentTools(s *server.MCPServer) {
 	s.AddTool(
-		mcp.NewTool("list_incidents",
+		newTool("list_incidents",
 			mcp.WithDescription("List recent incidents (downtime events) for a monitor. Returns newest first. An open incident has closed_at=null."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),
 			mcp.WithNumber("limit", mcp.Description("Max incidents to return (default 50, max 200).")),
@@ -43,7 +43,7 @@ func registerIncidentTools(s *server.MCPServer) {
 	)
 
 	s.AddTool(
-		mcp.NewTool("get_run_history",
+		newTool("get_run_history",
 			mcp.WithDescription("Get structured run history for a monitor — both CI/CD runs and agent/heartbeat runs. "+
 				"Each run carries its run id (rid), kind, received_at, the progress steps reported under it "+
 				"(steps: seq, name, at), and the correlated incident log excerpt (incident_detail) with resolution status. "+

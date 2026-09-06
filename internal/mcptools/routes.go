@@ -21,7 +21,7 @@ type Route struct {
 
 func registerRouteTools(s *server.MCPServer) {
 	s.AddTool(
-		mcp.NewTool("set_route",
+		newTool("set_route",
 			mcp.WithDescription("Route a monitor's alerts for one event type to a set of destinations (channels). "+
 				"THIS REPLACES THE WHOLE SET for that event type — every destination you leave out stops receiving that event, including ones somebody else configured. "+
 				"CALL get_monitor FIRST and read its `routes` field: that is the monitor's current routing, and adding a destination means passing the existing ids PLUS the new one. "+

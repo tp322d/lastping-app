@@ -69,12 +69,9 @@ func main() {
 // at root behind bearer auth + per-token rate limiting. Split out from main so
 // tests can drive it with httptest.
 func newHandler(apiBase, pingHost string) http.Handler {
-	s := server.NewMCPServer(
-		"lastping-mcp",
-		version,
-		server.WithToolCapabilities(true),
-	)
-	mcptools.Register(s, pingHost)
+	// One constructor for both transports: the stdio and remote binaries must
+	// not describe the same product differently. See internal/mcptools/metadata.go.
+	s := mcptools.NewServer(version, pingHost)
 
 	// Stateless: every request is self-contained and carries its own bearer
 	// token. WithHTTPContextFunc turns that token into a per-request API client.

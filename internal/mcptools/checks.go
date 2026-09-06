@@ -307,7 +307,7 @@ const (
 func registerCheckTools(s *server.MCPServer) {
 	// create_monitor
 	s.AddTool(
-		mcp.NewTool("create_monitor",
+		newTool("create_monitor",
 			mcp.WithDescription("Create a new LastPing monitor (or update an existing one if slug matches — returns 'updated' note on upsert). "+
 				"For heartbeat/ci monitors supply schedule_kind ('simple' requires period_s, 'cron' requires cron_expr, 'on_demand' requires neither). "+
 				"For http monitors supply probe_url and probe_interval_s instead — and set probe_expected_status/probe_expected_body too, because those are what define 'healthy'; "+
@@ -367,7 +367,7 @@ func registerCheckTools(s *server.MCPServer) {
 
 	// list_monitors
 	s.AddTool(
-		mcp.NewTool("list_monitors",
+		newTool("list_monitors",
 			mcp.WithDescription("List all monitors in the authenticated LastPing project. Returns id, name, slug, status, ping_url for each. Use the tag param to filter by a single tag."),
 			mcp.WithString("tag", mcp.Description("Optional tag to filter by, e.g. 'agent:claude'. Returns only monitors that have this tag.")),
 		),
@@ -382,7 +382,7 @@ func registerCheckTools(s *server.MCPServer) {
 
 	// get_monitor
 	s.AddTool(
-		mcp.NewTool("get_monitor",
+		newTool("get_monitor",
 			mcp.WithDescription("Get a single LastPing monitor by UUID. Returns the monitor's full configuration including its output assertions "+
 				"(the `assertions` field: conditions a successful run's ping body must satisfy; absent when the monitor has none) and its metric "+
 				"guards (the `guards` field: ceilings on a number the job reports about itself; absent when the monitor has none) and its alert "+
@@ -405,7 +405,7 @@ func registerCheckTools(s *server.MCPServer) {
 
 	// update_monitor
 	s.AddTool(
-		mcp.NewTool("update_monitor",
+		newTool("update_monitor",
 			mcp.WithDescription("Update an existing LastPing monitor's schedule/config by UUID using merge-patch semantics: "+
 				"only the fields you supply are changed, and any field you omit keeps its current stored value. "+
 				"If supplied, tags replaces the full tag set on the monitor (not merged). slug is immutable and cannot be changed. "+
@@ -471,7 +471,7 @@ func registerCheckTools(s *server.MCPServer) {
 
 	// delete_monitor
 	s.AddTool(
-		mcp.NewTool("delete_monitor",
+		newTool("delete_monitor",
 			mcp.WithDescription("Permanently delete a LastPing monitor by UUID. This cannot be undone."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID."))),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -489,7 +489,7 @@ func registerCheckTools(s *server.MCPServer) {
 
 	// pause_monitor
 	s.AddTool(
-		mcp.NewTool("pause_monitor",
+		newTool("pause_monitor",
 			mcp.WithDescription("Pause a LastPing monitor so it stops alerting (paused=true). The monitor still receives pings but does not alert."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID."))),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -507,7 +507,7 @@ func registerCheckTools(s *server.MCPServer) {
 
 	// resume_monitor
 	s.AddTool(
-		mcp.NewTool("resume_monitor",
+		newTool("resume_monitor",
 			mcp.WithDescription("Resume a paused LastPing monitor (paused=false). Alerting resumes on the next missed ping."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID."))),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -525,7 +525,7 @@ func registerCheckTools(s *server.MCPServer) {
 
 	// snooze_monitor
 	s.AddTool(
-		mcp.NewTool("snooze_monitor",
+		newTool("snooze_monitor",
 			mcp.WithDescription("Set or clear a maintenance window on a monitor. During the window the monitor will not alert. "+
 				"Provide exactly one of: duration (e.g. '1h', '24h'), until (RFC 3339 timestamp), or clear=true to remove the window."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),

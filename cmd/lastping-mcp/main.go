@@ -36,13 +36,9 @@ func main() {
 
 	envClient := mcptools.NewAPIClient(baseURL, apiKey)
 
-	s := server.NewMCPServer(
-		"lastping-mcp",
-		version,
-		server.WithToolCapabilities(true),
-	)
-
-	mcptools.Register(s, pingHost)
+	// One constructor for both transports: the stdio and remote binaries must
+	// not describe the same product differently. See internal/mcptools/metadata.go.
+	s := mcptools.NewServer(version, pingHost)
 
 	// WithStdioContextFunc seeds the *APIClient into every request context.
 	// The stdio server calls this once and shares the resulting context for all

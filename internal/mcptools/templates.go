@@ -39,7 +39,7 @@ func eventTypeList() string {
 func registerTemplateTools(s *server.MCPServer) {
 	// get_alert_templates
 	s.AddTool(
-		mcp.NewTool("get_alert_templates",
+		newTool("get_alert_templates",
 			mcp.WithDescription("Get all custom alert message templates for a LastPing monitor. "+
 				"Returns a map of event-type (or event-type/cause) keys to template strings. "+
 				"Keys: "+eventTypeList()+", or 'event_type/cause' "+
@@ -62,7 +62,7 @@ func registerTemplateTools(s *server.MCPServer) {
 
 	// set_alert_template
 	s.AddTool(
-		mcp.NewTool("set_alert_template",
+		newTool("set_alert_template",
 			mcp.WithDescription("Set or clear a single alert message template on a monitor. "+
 				"The template is validated for allowed variables before saving. "+
 				"Pass an empty string for template to reset that entry to the built-in default. "+

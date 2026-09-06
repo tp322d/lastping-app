@@ -69,7 +69,7 @@ const declareRunExpectationsDesc = "The run's complete set of expectations, decl
 // registerRunExpectationTools registers declare_run_expectations.
 func registerRunExpectationTools(s *server.MCPServer) {
 	s.AddTool(
-		mcp.NewTool("declare_run_expectations",
+		newTool("declare_run_expectations",
 			mcp.WithDescription("Commit, at the START of a run, to the criteria by which THAT RUN will be judged when it closes — before you can "+
 				"see how it turns out. This is how a run stops grading itself: once declared, a success ping whose body does not satisfy every "+
 				"declared criterion is recorded as a FAILED run with cause 'assertion', regardless of the exit code or what the ping claims. "+

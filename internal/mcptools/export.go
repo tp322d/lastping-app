@@ -20,7 +20,7 @@ import (
 
 func registerExportTools(s *server.MCPServer) {
 	s.AddTool(
-		mcp.NewTool("export_terraform",
+		newTool("export_terraform",
 			mcp.WithDescription("Export existing LastPing monitors, destinations, routes, "+
 				"alert templates and status pages as Terraform HCL, including import blocks "+
 				"so they are adopted rather than recreated. Secrets are NOT exported — the "+
