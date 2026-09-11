@@ -121,7 +121,8 @@ Agent registry: `register_agent` · `list_agents` · `get_agent` ·
 Status pages: `list_status_pages` · `create_status_page` ·
 `update_status_page` · `delete_status_page`
 
-API keys: `create_api_key` · `list_api_keys` · `revoke_api_key`
+API keys: `create_api_key` (optional `scope`: read / write / admin) ·
+`list_api_keys` · `revoke_api_key` (cascades to every key it created)
 
 Terraform: `export_terraform`
 
