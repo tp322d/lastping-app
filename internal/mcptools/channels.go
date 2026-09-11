@@ -6,10 +6,78 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
+
+// destinationKinds is the ordered list of destination kinds the hosted API
+// accepts, and destinationHostPins is the host rule it applies to the branded
+// ones. Both mirror the hosted server; nothing here is enforced by this binary
+// — a wrong URL is refused by the API, not by us. They exist so the tool
+// DESCRIPTIONS can be generated from one list instead of nine hand-typed
+// copies, which is how the kind list drifted before.
+//
+// The order is the one the dashboard dropdown and the OpenAPI enum render in.
+var destinationKinds = []string{
+	"webhook", "telegram", "discord", "slack", "ntfy",
+	"pushover", "msteams", "googlechat", "email",
+}
+
+// destinationHostPins maps a BRANDED kind to the host suffixes its URL may
+// point at. A kind absent from this map is deliberately NOT pinned:
+//
+//   - webhook is the generic escape hatch — any https host, by design. It is
+//     what an owner is told to switch to if their branded URL is off-host.
+//   - ntfy self-hosting is a documented, intentional feature; pinning it to
+//     ntfy.sh would delete a shipped capability.
+//
+// The Microsoft list is four generations of the same product deep: the
+// original Office 365 connector webhook, its per-tenant successor, the first
+// Power Automate "Workflows" replacement on logic.azure.com (.us for GCC
+// High), and what Power Automate issues now on
+// <env>.environment.api.powerplatform.com.
+//
+// What a pin buys, stated honestly: it narrows a branded destination's target
+// to the vendor's own platform. It does NOT prove the endpoint belongs to the
+// owner who created it — every one of these domains is multi-tenant and
+// self-service. What it removes is "any host on the internet" as the target of
+// a destination LABELLED with a vendor's name.
+var destinationHostPins = map[string][]string{
+	"slack":   {"hooks.slack.com"},
+	"discord": {"discord.com", "discordapp.com"},
+	"msteams": {
+		"webhook.office.com",
+		"outlook.office.com",
+		"logic.azure.com",
+		"logic.azure.us",
+		"environment.api.powerplatform.com",
+	},
+	"googlechat": {"chat.googleapis.com"},
+}
+
+// kindHostPinSentence renders the per-kind host pins for a tool description,
+// DERIVED from destinationHostPins so an agent is never told a rule in one
+// place and a different one in another. It ends with a trailing space, so the
+// caller can append.
+//
+// It exists because the MCP client surfaces only a problem's detail and drops
+// its fix, so the remediation an agent needs has to be in the tool description
+// BEFORE it guesses a URL — an agent that gets "400" with no actionable rule
+// retries the same call.
+func kindHostPinSentence() string {
+	var parts []string
+	for _, k := range destinationKinds {
+		if pins := destinationHostPins[k]; len(pins) > 0 {
+			parts = append(parts, k+" at "+strings.Join(pins, " or "))
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, ", ") + ". "
+}
 
 // Channel mirrors the LastPing Channel resource (no secrets).
 type Channel struct {
@@ -42,8 +110,18 @@ func registerChannelTools(s *server.MCPServer) {
 			mcp.WithDescription("Create a notification destination (channel) that monitors can route alerts to. "+
 				"Provide the fields for the chosen kind; unrelated fields are ignored. Non-email kinds are usable "+
 				"immediately; email kinds are created unverified and send a confirmation link that must be clicked "+
-				"before they can be attached to a route. Returns the new channel id — pass it to set_route."),
-			mcp.WithString("kind", mcp.Required(), mcp.Description("One of: webhook, email, slack, discord, telegram, ntfy, pushover, msteams, googlechat.")),
+				"before they can be attached to a route. A project holds at most 25 destinations — if creation is "+
+				"refused with DESTINATION_CAP_REACHED, delete one with delete_destination rather than retrying. "+
+				"Returns the new channel id — pass it to set_route."),
+			mcp.WithString("kind", mcp.Required(), mcp.Description(
+				"One of: "+strings.Join(destinationKinds, ", ")+". "+
+					"Every destination URL must be https. A BRANDED kind must point at its vendor's host: "+
+					kindHostPinSentence()+
+					"For any other endpoint use kind \"webhook\", which accepts any https host; ntfy is unpinned too, "+
+					"so a self-hosted ntfy server is fine. A pin narrows the destination to the vendor's own platform; "+
+					"it does NOT prove the endpoint belongs to the person or project that created it, because every "+
+					"pinned domain is multi-tenant and self-service. Do not report a pinned destination as verified or "+
+					"as owned by anyone on the strength of its host.")),
 			mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable destination name, e.g. 'On-call Slack'.")),
 			mcp.WithString("url", mcp.Description("webhook: the POST target URL.")),
 			mcp.WithString("secret", mcp.Description("webhook: shared secret used to sign the HMAC-SHA256 payload.")),
@@ -71,10 +149,16 @@ func registerChannelTools(s *server.MCPServer) {
 				"resets verification and sends a new confirmation email."),
 			mcp.WithString("destination_id", mcp.Required(), mcp.Description("UUID of the destination to update. Get it from list_destinations.")),
 			mcp.WithString("name", mcp.Description("New human-readable label. Omit to leave unchanged.")),
-			mcp.WithObject("config", mcp.Description("Replacement config for the destination's existing kind — one of webhook, telegram, "+
-				"discord, slack, ntfy, pushover, msteams, googlechat, email. Shape must match the kind: {\"url\":…,\"secret\":…} for webhook, "+
-				"{\"bot_token\":…,\"chat_id\":…} for telegram, {\"webhook_url\":…} for slack/discord/msteams/googlechat, {\"topic_url\":…} for ntfy, "+
-				"{\"token\":…,\"user_key\":…} for pushover, {\"address\":…} for email. Omit to leave unchanged.")),
+			mcp.WithObject("config", mcp.Description(
+				"Replacement config for the destination's existing kind — one of "+strings.Join(destinationKinds, ", ")+
+					". Shape must match the kind: {\"url\":…,\"secret\":…} for webhook, "+
+					"{\"bot_token\":…,\"chat_id\":…} for telegram, {\"webhook_url\":…} for slack/discord/msteams/googlechat, {\"topic_url\":…} for ntfy, "+
+					"{\"token\":…,\"user_key\":…} for pushover, {\"address\":…} for email. Omit to leave unchanged. "+
+					"A URL you supply is re-checked against the kind's allowed hosts and must be https; a destination "+
+					"created before that rule keeps working until you send a new config for it. The config must name "+
+					"only the fields listed for its kind, each exactly once. The host rule narrows a branded "+
+					"destination to the vendor's own platform; it does NOT prove the endpoint belongs to the person "+
+					"or project that owns the destination.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)

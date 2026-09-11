@@ -67,7 +67,11 @@ package mcptools
 // cost of a needless confirmation prompt is a click and the cost of a missing
 // one is an overwritten monitor.
 
-import "github.com/mark3labs/mcp-go/mcp"
+import (
+	"strings"
+
+	"github.com/mark3labs/mcp-go/mcp"
+)
 
 func boolPtr(b bool) *bool { return &b }
 
@@ -189,5 +193,21 @@ func newTool(name string, opts ...mcp.ToolOption) mcp.Tool {
 	if ann, ok := toolAnnotations[name]; ok {
 		opts = append([]mcp.ToolOption{mcp.WithToolAnnotation(ann)}, opts...)
 	}
-	return mcp.NewTool(name, opts...)
+	t := mcp.NewTool(name, opts...)
+	// The required scope (scopes.go) is PREPENDED to the description rather
+	// than passed as another option, because mcp.WithDescription assigns
+	// rather than appends and the per-tool text is written at the call site.
+	// It goes first, not last: some descriptions run past 3.5k characters
+	// (discover_monitors_reconcile), and a sentence appended after all of that
+	// is one a context-constrained agent, or a client UI that truncates long
+	// descriptions, is least likely to ever reach. The whole point is to let
+	// an agent anticipate a 403 before calling — that only works if the
+	// requirement is the first thing read, not the last. Same
+	// table-plus-one-helper shape as the annotations above, and for the same
+	// reason: 36 sites remembering to add a sentence would drift on the first
+	// tool anyone added in a hurry.
+	if s := scopeSentence(toolScopes[name]); s != "" {
+		t.Description = s + " " + strings.TrimSpace(t.Description)
+	}
+	return t
 }

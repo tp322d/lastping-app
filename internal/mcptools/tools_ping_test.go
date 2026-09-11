@@ -233,6 +233,11 @@ func TestGetPingInstructions_DescriptionMatchesHostedServer(t *testing.T) {
 // wantGetPingInstructionsDesc is the hosted server's get_ping_instructions
 // description, copied verbatim. See the test above.
 const wantGetPingInstructionsDesc = "" +
+	// The hosted server PREPENDS the required API key scope to every tool
+	// description (scopes.go), so the pin starts with it too. Dropping it here
+	// would make this test pass against a binary that stopped telling agents
+	// which credential the tool needs.
+	"Requires an API key with the read scope or higher. " +
 	"Get everything needed to make a monitor actually report: the ping URL, copy-paste check-in snippets, and the three " +
 	"MECHANISMS for reporting, returned together. Call this right after create_monitor. " +
 	"CHOOSE BY WHAT THE MONITORED THING IS — read `reporting_options` first and pick by that, rather than defaulting to the raw curl list: " +

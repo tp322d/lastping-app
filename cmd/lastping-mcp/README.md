@@ -72,6 +72,45 @@ Claude Desktop (`claude_desktop_config.json`), Cursor, or a project `.mcp.json`:
 **Terraform:** `export_terraform`
 **Self-instrumentation:** **`get_ping_instructions`** — returns a monitor's ping URL plus ready-to-run success / start / fail snippets, so the agent can make the monitored job actually check in. · `declare_run_expectations` — commit, at the *start* of a run, to the criteria that run will be judged by, before the outcome is knowable. Immutable once declared.
 
+### API key scopes
+
+Every tool description starts with the scope its API key needs: `read` (the
+twelve `list_*` / `get_*` tools and `export_terraform`), `write` (everything
+that changes LastPing state, plus `test_destination`, which sends a real
+message to a third party), or `admin` (the three key-management tools —
+`list_api_keys` included, because key names, prefixes, expiries and lineage are
+what you need to choose which key to revoke).
+
+The scope is stated up front so an agent can anticipate a refusal instead of
+discovering it from a 403 and retrying. Nothing is enforced here: this binary
+is a REST client and the hosted API is the only authorization layer. A refusal
+names the tier it wanted — a 403 carries `required_scope`, and a
+`create_api_key` call asking for more than the creating key holds comes back
+with `max_scope` — and both are folded into the tool's error text.
+
+`create_api_key` takes an optional `scope` (`read`, `write` or `admin`;
+defaults to `write` server-side). A key can never be given a higher scope, or a
+longer life, than the key that creates it. `revoke_api_key` cascades: it
+revokes the named key **and every key it created**, recursively, and reports
+how many went.
+
+### Destination host rules
+
+`create_destination` and `update_destination` state the host rule the API
+applies, because a bare 400 gives an agent nothing to correct. Every
+destination URL must be https. Branded kinds are pinned to their vendor's
+hosts: `slack` to `hooks.slack.com`, `discord` to `discord.com` or
+`discordapp.com`, `msteams` to `webhook.office.com`, `outlook.office.com`,
+`logic.azure.com`, `logic.azure.us` or `environment.api.powerplatform.com`, and
+`googlechat` to `chat.googleapis.com`. `webhook` accepts any https host and
+`ntfy` is unpinned, so a self-hosted ntfy server is fine.
+
+A pin narrows a destination to the vendor's own platform. It does **not** prove
+the endpoint belongs to whoever created it — every pinned domain is
+multi-tenant and self-service — so a pinned destination is not "verified" or
+"owned" on the strength of its host. A project holds at most 25 destinations;
+`DESTINATION_CAP_REACHED` means delete one, not retry.
+
 ## The flow that makes agents self-monitoring
 
 1. `create_monitor` → e.g. a heartbeat expected every day, or a cron-scheduled agent run
