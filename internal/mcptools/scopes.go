@@ -25,6 +25,7 @@ var toolScopes = map[string]string{
 	"export_terraform":      "read",
 	"get_agent":             "read",
 	"get_alert_templates":   "read",
+	"get_incident":          "read",
 	"get_monitor":           "read",
 	"get_ping_instructions": "read",
 	"get_run_history":       "read",

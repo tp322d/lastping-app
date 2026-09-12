@@ -13,7 +13,7 @@ agent can set up its own monitoring:
 2. **`get_ping_instructions`** — get the ping URL + ready-to-run `curl_success` / `curl_start` / `curl_fail` snippets for that monitor.
 3. **Wire the ping into your work** — run the **success** ping when the task finishes, the **fail** ping if it errors, and (for long or possibly-hung work) the **start** ping first.
 
-You can also `list_incidents`, `snooze_monitor` during planned downtime, and `pause_monitor`/`resume_monitor`.
+You can also `list_incidents`, `get_incident` for one incident's recorded timeline (run start and steps, the failing ping, which alerts went out, notes, resolution), `snooze_monitor` during planned downtime, and `pause_monitor`/`resume_monitor`.
 
 ## Via the REST API directly
 

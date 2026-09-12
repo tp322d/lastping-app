@@ -110,6 +110,7 @@ var toolAnnotations = map[string]mcp.ToolAnnotation{
 	"export_terraform":      readOnly(),
 	"get_agent":             readOnly(),
 	"get_alert_templates":   readOnly(),
+	"get_incident":          readOnly(),
 	"get_monitor":           readOnly(),
 	"get_ping_instructions": readOnly(),
 	"get_run_history":       readOnly(),
