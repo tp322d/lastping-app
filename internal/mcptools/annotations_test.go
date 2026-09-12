@@ -112,6 +112,7 @@ func TestAnnotations_NoReaderClaimsToWrite(t *testing.T) {
 		"export_terraform",
 		"get_agent",
 		"get_alert_templates",
+		"get_incident",
 		"get_monitor",
 		"get_ping_instructions",
 		"get_run_history",

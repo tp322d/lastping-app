@@ -321,7 +321,7 @@ func TestListIncidents(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[{"opened_at":"2026-07-10T03:10:00Z","closed_at":null,"cause":"late","detail":""}]`))
+		_, _ = w.Write([]byte(`[{"incident_id":4821,"opened_at":"2026-07-10T03:10:00Z","closed_at":null,"cause":"late","detail":""}]`))
 	}))
 	defer srv.Close()
 
@@ -332,6 +332,11 @@ func TestListIncidents(t *testing.T) {
 	assert.False(t, result.IsError)
 	assert.Equal(t, "/api/v1/checks/abc-123/incidents", capturedPath)
 	assert.Contains(t, extractText(result), "late")
+
+	// get_incident's own description names incident_id as the join key coming
+	// from list_incidents; if the Incident DTO drops the field on re-marshal,
+	// that id source is dead. Assert it survives the round trip.
+	assert.Contains(t, extractText(result), `"incident_id": 4821`)
 }
 
 func TestListIncidents_WithLimit(t *testing.T) {
