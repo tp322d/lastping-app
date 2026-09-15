@@ -94,7 +94,7 @@ go install github.com/tp322d/lastping-app/cmd/lastping-mcp@latest
 ```
 
 <details>
-<summary><b>Tools in this repository's stdio binary (37)</b></summary>
+<summary><b>Tools in this repository's stdio binary (38)</b></summary>
 
 Monitors: `create_monitor` · `get_monitor` · `list_monitors` ·
 `update_monitor` · `delete_monitor` · `pause_monitor` · `resume_monitor` ·
@@ -104,7 +104,8 @@ Discovery: `discover_monitors_reconcile`
 
 Reporting: `get_ping_instructions` · `declare_run_expectations`
 
-Incidents & runs: `list_incidents` · `get_run_history` · `get_incident`
+Incidents & runs: `list_incidents` · `get_run_history` · `get_run`
+(one run's full timeline and assertion verdicts) · `get_incident`
 (one incident's recorded timeline)
 
 The failure loop: `list_open_incidents` · `add_incident_note`

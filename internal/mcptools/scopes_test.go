@@ -23,6 +23,7 @@ var wantToolScopes = map[string]string{
 	"get_incident":          "read",
 	"get_monitor":           "read",
 	"get_ping_instructions": "read",
+	"get_run":               "read",
 	"get_run_history":       "read",
 	"list_agents":           "read",
 	"list_destinations":     "read",
@@ -117,8 +118,8 @@ func TestToolScopes_TableHasNoRowForAToolThatDoesNotExist(t *testing.T) {
 // server's route table fails here rather than being discovered by an agent
 // holding the wrong credential.
 func TestToolScopes_MatchTheHostedServer(t *testing.T) {
-	require.Len(t, wantToolScopes, 37,
-		"the hosted server exposes 37 tools; update wantToolScopes deliberately when that changes")
+	require.Len(t, wantToolScopes, 38,
+		"the hosted server exposes 38 tools; update wantToolScopes deliberately when that changes")
 	require.Equal(t, wantToolScopes, toolScopes,
 		"toolScopes has drifted from the hosted server's per-tool requirement")
 }

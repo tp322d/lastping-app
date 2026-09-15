@@ -56,6 +56,8 @@ var wantTools = []string{
 	"list_incidents",
 	"get_run_history",
 	"get_incident",
+	// runs.go (1)
+	"get_run",
 	// ping.go (1)
 	"get_ping_instructions",
 	// routes.go (1)
@@ -72,14 +74,14 @@ var wantTools = []string{
 	"set_alert_template",
 }
 
-// TestGoldenToolCount_Is37 is the regression guard for tool parity with the
+// TestGoldenToolCount_Is38 is the regression guard for tool parity with the
 // hosted MCP server. It fails if a tool is dropped or added without updating
 // wantTools above.
-func TestGoldenToolCount_Is37(t *testing.T) {
-	require.Len(t, wantTools, 37, "wantTools itself must list exactly 37 tools — update it deliberately, alongside internal/mcptools, when parity changes")
+func TestGoldenToolCount_Is38(t *testing.T) {
+	require.Len(t, wantTools, 38, "wantTools itself must list exactly 38 tools — update it deliberately, alongside internal/mcptools, when parity changes")
 
 	got := registeredToolNames(t)
-	require.Len(t, got, 37, "the server must register exactly 37 tools")
+	require.Len(t, got, 38, "the server must register exactly 38 tools")
 
 	want := append([]string(nil), wantTools...)
 	sort.Strings(want)
