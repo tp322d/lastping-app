@@ -16,7 +16,7 @@ import (
 // thing a human updates, by reading the hosted server's route table, when a
 // tool's requirement changes.
 var wantToolScopes = map[string]string{
-	// Reads (13).
+	// Reads (14).
 	"export_terraform":      "read",
 	"get_agent":             "read",
 	"get_alert_templates":   "read",
@@ -25,6 +25,7 @@ var wantToolScopes = map[string]string{
 	"get_ping_instructions": "read",
 	"get_run_history":       "read",
 	"list_agents":           "read",
+	"list_deliveries":       "read",
 	"list_destinations":     "read",
 	"list_incidents":        "read",
 	"list_monitors":         "read",
@@ -117,8 +118,8 @@ func TestToolScopes_TableHasNoRowForAToolThatDoesNotExist(t *testing.T) {
 // server's route table fails here rather than being discovered by an agent
 // holding the wrong credential.
 func TestToolScopes_MatchTheHostedServer(t *testing.T) {
-	require.Len(t, wantToolScopes, 37,
-		"the hosted server exposes 37 tools; update wantToolScopes deliberately when that changes")
+	require.Len(t, wantToolScopes, 38,
+		"the hosted server exposes 38 tools; update wantToolScopes deliberately when that changes")
 	require.Equal(t, wantToolScopes, toolScopes,
 		"toolScopes has drifted from the hosted server's per-tool requirement")
 }

@@ -30,6 +30,7 @@ var toolScopes = map[string]string{
 	"get_ping_instructions": "read",
 	"get_run_history":       "read",
 	"list_agents":           "read",
+	"list_deliveries":       "read",
 	"list_destinations":     "read",
 	"list_incidents":        "read",
 	"list_monitors":         "read",

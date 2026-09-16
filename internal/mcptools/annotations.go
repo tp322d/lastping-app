@@ -116,6 +116,7 @@ var toolAnnotations = map[string]mcp.ToolAnnotation{
 	"get_run_history":       readOnly(),
 	"list_agents":           readOnly(),
 	"list_api_keys":         readOnly(),
+	"list_deliveries":       readOnly(),
 	"list_destinations":     readOnly(),
 	"list_incidents":        readOnly(),
 	"list_monitors":         readOnly(),
