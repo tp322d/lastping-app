@@ -113,13 +113,14 @@ func (c *APIClient) listDeliveries(ctx context.Context, monitor, status string, 
 	// own send-failure text, which can embed whatever a destination's
 	// endpoint returned; channel_name and check_name are outsider-chosen
 	// labels, the same authorship test every other tool in this package
-	// applies. They are named flat, not "deliveries.last_error" etc.,
-	// because data here is the whole page object and it holds exactly one
-	// array — the field names, unprefixed, are unambiguous. incident_id,
-	// event_type, status and the ids/timestamps are all LastPing's own and
-	// stay out of the list.
+	// applies. They carry the "deliveries." prefix, per untrusted.go's
+	// dotted-array convention: data is the whole page object, "deliveries"
+	// is the one array it wraps, and every other object-wrapping-an-array
+	// tool in this package (get_incident's "events.*") names its nested
+	// fields the same way. incident_id, event_type, status and the
+	// ids/timestamps are all LastPing's own and stay out of the list.
 	//
 	// This list is byte-for-byte the hosted server's, and must stay that way.
 	var data json.RawMessage = body
-	return untrustedResult(data, "last_error", "channel_name", "check_name")
+	return untrustedResult(data, "deliveries.last_error", "deliveries.channel_name", "deliveries.check_name")
 }

@@ -50,7 +50,7 @@ func TestListDeliveries(t *testing.T) {
 		Data            json.RawMessage `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(extractText(result)), &env))
-	require.Equal(t, []string{"last_error", "channel_name", "check_name"}, env.UntrustedFields)
+	require.Equal(t, []string{"deliveries.last_error", "deliveries.channel_name", "deliveries.check_name"}, env.UntrustedFields)
 
 	var data struct {
 		Deliveries []struct {
