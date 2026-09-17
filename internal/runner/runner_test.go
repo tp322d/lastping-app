@@ -606,32 +606,41 @@ func TestExitCodeOfNil(t *testing.T) {
 
 func TestOtelTracesEndpoint(t *testing.T) {
 	cases := []struct {
-		name string
-		base string
-		want string
+		name      string
+		base      string
+		monitorID string
+		hasKey    bool
+		want      string
 	}{
-		{"production host", "https://ping.lastping.dev", "https://ping.lastping.dev/v1/traces"},
-		{"httptest host", "http://127.0.0.1:4318", "http://127.0.0.1:4318/v1/traces"},
-		{"trailing slash", "https://ping.lastping.dev/", "https://ping.lastping.dev/v1/traces"},
-		{"no scheme, unparsable as a host", "not-a-url", ""},
-		{"empty", "", ""},
+		{"with key: bearer form, host only", "https://ping.lastping.dev", testMonitor, true, "https://ping.lastping.dev/v1/traces"},
+		{"without key: monitor-URL form, header-free", "https://ping.lastping.dev", testMonitor, false, "https://ping.lastping.dev/" + testMonitor + "/v1/traces"},
+		{"httptest host, with key", "http://127.0.0.1:4318", testMonitor, true, "http://127.0.0.1:4318/v1/traces"},
+		{"httptest host, without key", "http://127.0.0.1:4318", testMonitor, false, "http://127.0.0.1:4318/" + testMonitor + "/v1/traces"},
+		{"trailing slash, with key", "https://ping.lastping.dev/", testMonitor, true, "https://ping.lastping.dev/v1/traces"},
+		{"no scheme, unparsable as a host", "not-a-url", testMonitor, true, ""},
+		{"empty", "", testMonitor, true, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := otelTracesEndpoint(tc.base); got != tc.want {
-				t.Errorf("otelTracesEndpoint(%q) = %q, want %q", tc.base, got, tc.want)
+			if got := otelTracesEndpoint(tc.base, tc.monitorID, tc.hasKey); got != tc.want {
+				t.Errorf("otelTracesEndpoint(%q, %q, %v) = %q, want %q", tc.base, tc.monitorID, tc.hasKey, got, tc.want)
 			}
 		})
 	}
 }
 
+// TestInjectOTelEnv_WithoutAPIKey: without a key, the injected endpoint must
+// be the monitor-URL form -- the same header-free authentication /start and
+// /cancel already use -- not the Bearer-only host route, which can only ever
+// 401 a headerless exporter.
 func TestInjectOTelEnv_WithoutAPIKey(t *testing.T) {
 	env := []string{"PATH=/bin"}
 	got := injectOTelEnv(env, "https://ping.lastping.dev", testMonitor, "deadbeef")
 
 	endpoint, ok := lookupEnv(got, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
-	if !ok || endpoint != "https://ping.lastping.dev/v1/traces" {
-		t.Errorf("endpoint = %q, ok=%v; want the derived endpoint injected even without a key", endpoint, ok)
+	wantEndpoint := "https://ping.lastping.dev/" + testMonitor + "/v1/traces"
+	if !ok || endpoint != wantEndpoint {
+		t.Errorf("endpoint = %q, ok=%v; want the monitor-URL form %q injected even without a key", endpoint, ok, wantEndpoint)
 	}
 	attrs, ok := lookupEnv(got, "OTEL_RESOURCE_ATTRIBUTES")
 	want := "lastping.monitor_id=" + testMonitor + ",lastping.run_id=deadbeef"
@@ -648,6 +657,14 @@ func TestInjectOTelEnv_WithoutAPIKey(t *testing.T) {
 func TestInjectOTelEnv_WithAPIKeyForwardsBearerHeaderOnly(t *testing.T) {
 	env := []string{"PATH=/bin", "LASTPING_API_KEY=lp_write_secret123"}
 	got := injectOTelEnv(env, "https://ping.lastping.dev", testMonitor, "deadbeef")
+
+	// With a key present, the endpoint is the Bearer form (host only, no
+	// monitor id in the path) -- the counterpart to
+	// TestInjectOTelEnv_WithoutAPIKey's monitor-URL form.
+	endpoint, ok := lookupEnv(got, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+	if !ok || endpoint != "https://ping.lastping.dev/v1/traces" {
+		t.Errorf("endpoint = %q, ok=%v; want the bearer-form host endpoint when a key is present", endpoint, ok)
+	}
 
 	headers, ok := lookupEnv(got, "OTEL_EXPORTER_OTLP_HEADERS")
 	want := "Authorization=Bearer lp_write_secret123"
@@ -768,5 +785,26 @@ func TestRun_InjectsOTelEnvIntoChildAndNeverLeaksKeyToPings(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), "lp_do_not_leak_me") {
 		t.Errorf("api key leaked into the wrapper's own stderr: %q", stderr.String())
+	}
+}
+
+// TestRun_InjectsMonitorURLEndpointWithoutAPIKey is
+// TestRun_InjectsOTelEnvIntoChildAndNeverLeaksKeyToPings's keyless
+// counterpart, through the real entry point: without LASTPING_API_KEY, the
+// child must see the monitor-URL form of the endpoint, not the Bearer-only
+// host route.
+func TestRun_InjectsMonitorURLEndpointWithoutAPIKey(t *testing.T) {
+	rec := newRecorder(t)
+	var stdout bytes.Buffer
+	opts := baseOpts(rec, "sh", "-c", `echo "ENDPOINT=$OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"`)
+	opts.Stdout = &stdout
+	opts.Env = []string{"PATH=" + os.Getenv("PATH")}
+	if _, err := Run(opts); err != nil {
+		t.Fatal(err)
+	}
+	out := stdout.String()
+	want := "ENDPOINT=" + rec.srv.URL + "/" + testMonitor + "/v1/traces"
+	if !strings.Contains(out, want) {
+		t.Errorf("child did not see the monitor-URL endpoint; want %q in stdout = %q", want, out)
 	}
 }

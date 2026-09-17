@@ -39,10 +39,13 @@
 // without code changes. It is read once, from the environment the child would
 // have inherited anyway, and never logged, never put in a ping URL or ping
 // body, and never used to authenticate anything this package itself sends. See
-// injectOTelEnv. Without a key, the endpoint and resource attributes are still
-// injected, so a user who points OTEL_EXPORTER_OTLP_HEADERS-free exporters at
-// the monitor-URL form (<ping url>/v1/traces) instead of the Bearer form is
-// still served.
+// injectOTelEnv. The injected OTEL_EXPORTER_OTLP_TRACES_ENDPOINT depends on
+// whether a key is present: with one, the Bearer form (<ping host>/v1/traces,
+// authenticated by OTEL_EXPORTER_OTLP_HEADERS); without one, the monitor-URL
+// form (<ping host>/<monitor id>/v1/traces) — the same header-free
+// authentication /start and /cancel already use — so a keyless exporter can
+// actually authenticate instead of getting a 401 from the Bearer-only host
+// route.
 package runner
 
 import (
@@ -394,8 +397,17 @@ func randomRID() string {
 // A variable the caller already set is never overridden; a
 // OTEL_RESOURCE_ATTRIBUTES the caller already set is merged, keeping every
 // existing entry and appending only the lastping.* keys not already present.
+//
+// Whether a key is present also decides WHICH endpoint form gets injected
+// (otelTracesEndpoint): the key is read here, before building the endpoint,
+// specifically so that choice can be made once, in one place, rather than the
+// endpoint being picked independently of whether a header ends up alongside
+// it.
 func injectOTelEnv(env []string, pingBase, monitorID, rid string) []string {
-	endpoint := otelTracesEndpoint(pingBase)
+	apiKey, hasKey := lookupEnv(env, "LASTPING_API_KEY")
+	hasKey = hasKey && apiKey != ""
+
+	endpoint := otelTracesEndpoint(pingBase, monitorID, hasKey)
 	if endpoint == "" {
 		return env
 	}
@@ -408,7 +420,7 @@ func injectOTelEnv(env []string, pingBase, monitorID, rid string) []string {
 	existingAttrs, _ := lookupEnv(out, "OTEL_RESOURCE_ATTRIBUTES")
 	out = setEnv(out, "OTEL_RESOURCE_ATTRIBUTES", mergeResourceAttributes(existingAttrs, monitorID, rid))
 
-	if apiKey, ok := lookupEnv(out, "LASTPING_API_KEY"); ok && apiKey != "" {
+	if hasKey {
 		if _, ok := lookupEnv(out, "OTEL_EXPORTER_OTLP_HEADERS"); !ok {
 			out = append(out, "OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer "+apiKey)
 		}
@@ -417,16 +429,26 @@ func injectOTelEnv(env []string, pingBase, monitorID, rid string) []string {
 	return out
 }
 
-// otelTracesEndpoint derives "<scheme>://<host>/v1/traces" from pingBase, or
-// "" if pingBase does not parse into a URL with both — the "ping URL's host is
-// known" condition. A test httptest base (http://127.0.0.1:port) parses fine,
-// which is what makes this testable without a real ping host.
-func otelTracesEndpoint(pingBase string) string {
+// otelTracesEndpoint derives the OTLP traces endpoint from pingBase: with a
+// key present (hasKey), the Bearer form "<scheme>://<host>/v1/traces" — the
+// key alone names the project, and lastping.monitor_id in
+// OTEL_RESOURCE_ATTRIBUTES names the check within it. Without one, the
+// monitor-URL form "<scheme>://<host>/<monitor id>/v1/traces" instead: the
+// Bearer-only host route can only ever 401 a headerless exporter, where the
+// monitor-URL form is the SAME no-credentials-needed authentication /start
+// and /cancel already rely on. Returns "" if pingBase does not parse into a
+// URL with both a scheme and a host — the "ping URL's host is known"
+// condition. A test httptest base (http://127.0.0.1:port) parses fine, which
+// is what makes this testable without a real ping host.
+func otelTracesEndpoint(pingBase, monitorID string, hasKey bool) string {
 	u, err := url.Parse(pingBase)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return ""
 	}
-	return u.Scheme + "://" + u.Host + "/v1/traces"
+	if hasKey {
+		return u.Scheme + "://" + u.Host + "/v1/traces"
+	}
+	return u.Scheme + "://" + u.Host + "/" + monitorID + "/v1/traces"
 }
 
 // mergeResourceAttributes appends lastping.monitor_id and lastping.run_id to

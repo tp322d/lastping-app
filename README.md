@@ -70,22 +70,23 @@ lifecycle, so nothing depends on anybody remembering.
 
 ### Traces (ships with the next server release)
 
-Set `LASTPING_API_KEY` and `lastping run` also configures your wrapped
-command's OpenTelemetry exporter, in its environment only, so an
-auto-instrumented agent can export its own trace spans with no code change:
+`lastping run` always configures your wrapped command's OpenTelemetry
+exporter, in its environment only, so an auto-instrumented agent can export
+its own trace spans with no code change:
 
-- `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` — the ping host's `/v1/traces`.
+- `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` — the header-free monitor-URL form
+  (`<ping url>/v1/traces`) when `LASTPING_API_KEY` is not set, so a headerless
+  exporter can still authenticate; the ping host's `/v1/traces` (the Bearer
+  form) when it is set.
 - `OTEL_RESOURCE_ATTRIBUTES` — `lastping.monitor_id=<id>,lastping.run_id=<rid>`
   appended to whatever you already set, so a trace's spans join the same run
   the surrounding pings report.
 - `OTEL_EXPORTER_OTLP_HEADERS` — `Authorization=Bearer <your key>`, only when
-  you have not already set that variable yourself.
+  `LASTPING_API_KEY` is set and you have not already set that variable
+  yourself.
 
-Any of the three you already set is left alone. Without a key, the endpoint
-and resource attributes are still injected, so exporters that point at the
-header-free monitor-URL form (`<ping url>/v1/traces`) work too. The key is
-never used to authenticate a ping; the ping URL stays unauthenticated by
-design, as above.
+Any of the three you already set is left alone. The key is never used to
+authenticate a ping; the ping URL stays unauthenticated by design, as above.
 
 ## MCP server — let an agent set up its own monitoring
 
