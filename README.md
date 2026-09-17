@@ -185,9 +185,9 @@ curl -fsS -m 10 --retry 3 https://ping.lastping.dev/<monitor-id>
 (`application/x-protobuf` or `application/json`, gzip accepted) with a
 `Bearer <write key>` header, or `POST <ping-url>/v1/traces` for exporters that
 cannot set headers. Spans need resource attributes `lastping.monitor_id` and
-`lastping.run_id` to be accepted; a payload is capped at 1 MiB, 500 spans per
-request and 2,000 spans per run. `lastping run` sets all of this up for you —
-see Traces above.
+`lastping.run_id` to be accepted; a payload is capped at 1 MiB decompressed,
+500 spans per request and 2,000 spans per run. `lastping run` sets all of
+this up for you — see Traces above.
 
 ## Monitoring as code
 
