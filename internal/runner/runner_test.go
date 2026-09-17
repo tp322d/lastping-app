@@ -597,3 +597,176 @@ func TestExitCodeOfNil(t *testing.T) {
 		t.Errorf("exitCodeOf(nil) = %d, want 0", got)
 	}
 }
+
+// ── OTel environment injection (ruling 5) ────────────────────────────────
+//
+// The wrapper still never authenticates its own pings; these tests cover the
+// separate thing it does now, which is preparing the CHILD's environment for
+// an auto-instrumented OTel exporter.
+
+func TestOtelTracesEndpoint(t *testing.T) {
+	cases := []struct {
+		name string
+		base string
+		want string
+	}{
+		{"production host", "https://ping.lastping.dev", "https://ping.lastping.dev/v1/traces"},
+		{"httptest host", "http://127.0.0.1:4318", "http://127.0.0.1:4318/v1/traces"},
+		{"trailing slash", "https://ping.lastping.dev/", "https://ping.lastping.dev/v1/traces"},
+		{"no scheme, unparsable as a host", "not-a-url", ""},
+		{"empty", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := otelTracesEndpoint(tc.base); got != tc.want {
+				t.Errorf("otelTracesEndpoint(%q) = %q, want %q", tc.base, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestInjectOTelEnv_WithoutAPIKey(t *testing.T) {
+	env := []string{"PATH=/bin"}
+	got := injectOTelEnv(env, "https://ping.lastping.dev", testMonitor, "deadbeef")
+
+	endpoint, ok := lookupEnv(got, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+	if !ok || endpoint != "https://ping.lastping.dev/v1/traces" {
+		t.Errorf("endpoint = %q, ok=%v; want the derived endpoint injected even without a key", endpoint, ok)
+	}
+	attrs, ok := lookupEnv(got, "OTEL_RESOURCE_ATTRIBUTES")
+	want := "lastping.monitor_id=" + testMonitor + ",lastping.run_id=deadbeef"
+	if !ok || attrs != want {
+		t.Errorf("attrs = %q, ok=%v; want %q", attrs, ok, want)
+	}
+	// Without a key there is nothing to forward as a Bearer token: the
+	// monitor-URL form must remain usable header-free.
+	if _, ok := lookupEnv(got, "OTEL_EXPORTER_OTLP_HEADERS"); ok {
+		t.Error("OTEL_EXPORTER_OTLP_HEADERS must not be set when LASTPING_API_KEY is absent")
+	}
+}
+
+func TestInjectOTelEnv_WithAPIKeyForwardsBearerHeaderOnly(t *testing.T) {
+	env := []string{"PATH=/bin", "LASTPING_API_KEY=lp_write_secret123"}
+	got := injectOTelEnv(env, "https://ping.lastping.dev", testMonitor, "deadbeef")
+
+	headers, ok := lookupEnv(got, "OTEL_EXPORTER_OTLP_HEADERS")
+	want := "Authorization=Bearer lp_write_secret123"
+	if !ok || headers != want {
+		t.Errorf("headers = %q, ok=%v; want %q", headers, ok, want)
+	}
+
+	// The key is forwarded to the exporter header and nowhere else: it must not
+	// appear a second time under a different variable, in the endpoint, or in
+	// the resource attributes.
+	for _, kv := range got {
+		if strings.Contains(kv, "lp_write_secret123") && !strings.HasPrefix(kv, "LASTPING_API_KEY=") && !strings.HasPrefix(kv, "OTEL_EXPORTER_OTLP_HEADERS=") {
+			t.Errorf("api key leaked into an unexpected variable: %q", kv)
+		}
+	}
+}
+
+func TestInjectOTelEnv_MergesExistingResourceAttributes(t *testing.T) {
+	env := []string{"OTEL_RESOURCE_ATTRIBUTES=service.name=my-agent,deployment.environment=prod"}
+	got := injectOTelEnv(env, "https://ping.lastping.dev", testMonitor, "deadbeef")
+
+	attrs, _ := lookupEnv(got, "OTEL_RESOURCE_ATTRIBUTES")
+	want := "service.name=my-agent,deployment.environment=prod,lastping.monitor_id=" + testMonitor + ",lastping.run_id=deadbeef"
+	if attrs != want {
+		t.Errorf("attrs = %q, want %q (existing entries kept, LastPing keys appended)", attrs, want)
+	}
+}
+
+func TestInjectOTelEnv_DoesNotOverrideUserSetLastpingKeys(t *testing.T) {
+	env := []string{"OTEL_RESOURCE_ATTRIBUTES=lastping.monitor_id=user-chosen-id"}
+	got := injectOTelEnv(env, "https://ping.lastping.dev", testMonitor, "deadbeef")
+
+	attrs, _ := lookupEnv(got, "OTEL_RESOURCE_ATTRIBUTES")
+	want := "lastping.monitor_id=user-chosen-id,lastping.run_id=deadbeef"
+	if attrs != want {
+		t.Errorf("attrs = %q, want %q — a key the user already set must not be overridden", attrs, want)
+	}
+}
+
+func TestInjectOTelEnv_DoesNotOverrideExistingEndpointOrHeaders(t *testing.T) {
+	env := []string{
+		"LASTPING_API_KEY=lp_secret",
+		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://my-collector.internal:4318/v1/traces",
+		"OTEL_EXPORTER_OTLP_HEADERS=x-custom-header=1",
+	}
+	got := injectOTelEnv(env, "https://ping.lastping.dev", testMonitor, "deadbeef")
+
+	endpoint, _ := lookupEnv(got, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+	if endpoint != "https://my-collector.internal:4318/v1/traces" {
+		t.Errorf("endpoint = %q, want the user's own collector left untouched", endpoint)
+	}
+	headers, _ := lookupEnv(got, "OTEL_EXPORTER_OTLP_HEADERS")
+	if headers != "x-custom-header=1" {
+		t.Errorf("headers = %q, want the user's own header left untouched, no Bearer token appended", headers)
+	}
+	// lookupEnv reports only the first match, so a naive "append instead of
+	// leave alone" bug would pass the two checks above while leaving a second,
+	// injected copy of the key later in the slice — which os/exec's duplicate
+	// handling makes it a coin flip which one the child actually sees. Count
+	// occurrences directly rather than trusting lookupEnv here.
+	if n := countEnvKey(got, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"); n != 1 {
+		t.Errorf("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT appears %d times, want exactly 1", n)
+	}
+	if n := countEnvKey(got, "OTEL_EXPORTER_OTLP_HEADERS"); n != 1 {
+		t.Errorf("OTEL_EXPORTER_OTLP_HEADERS appears %d times, want exactly 1", n)
+	}
+}
+
+func countEnvKey(env []string, key string) int {
+	prefix := key + "="
+	n := 0
+	for _, kv := range env {
+		if strings.HasPrefix(kv, prefix) {
+			n++
+		}
+	}
+	return n
+}
+
+func TestInjectOTelEnv_UnknownHostInjectsNothing(t *testing.T) {
+	env := []string{"PATH=/bin"}
+	got := injectOTelEnv(env, "not-a-url", testMonitor, "deadbeef")
+	if len(got) != len(env) {
+		t.Fatalf("got %v, want env unchanged when the ping host is not known", got)
+	}
+}
+
+// TestRun_InjectsOTelEnvIntoChildAndNeverLeaksKeyToPings is the end-to-end
+// version, through the real entry point: the child observes the injected
+// variables, and the API key never appears in any ping request the recorder
+// captured or in the wrapper's own stderr.
+func TestRun_InjectsOTelEnvIntoChildAndNeverLeaksKeyToPings(t *testing.T) {
+	rec := newRecorder(t)
+	var stdout, stderr bytes.Buffer
+	opts := baseOpts(rec, "sh", "-c", `echo "ENDPOINT=$OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"; echo "ATTRS=$OTEL_RESOURCE_ATTRIBUTES"; echo "HEADERS=$OTEL_EXPORTER_OTLP_HEADERS"`)
+	opts.Stdout = &stdout
+	opts.Stderr = &stderr
+	opts.Env = []string{"PATH=" + os.Getenv("PATH"), "LASTPING_API_KEY=lp_do_not_leak_me"}
+	if _, err := Run(opts); err != nil {
+		t.Fatal(err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "ENDPOINT="+rec.srv.URL+"/v1/traces") {
+		t.Errorf("child did not see the derived endpoint; stdout = %q", out)
+	}
+	if !strings.Contains(out, "ATTRS=lastping.monitor_id="+testMonitor+",lastping.run_id=deadbeef") {
+		t.Errorf("child did not see the resource attributes; stdout = %q", out)
+	}
+	if !strings.Contains(out, "HEADERS=Authorization=Bearer lp_do_not_leak_me") {
+		t.Errorf("child did not see the bearer header; stdout = %q", out)
+	}
+
+	rec.waitFor(t, 2)
+	for _, r := range rec.all() {
+		if strings.Contains(r.Path, "lp_do_not_leak_me") || strings.Contains(r.Body, "lp_do_not_leak_me") {
+			t.Errorf("api key leaked into a ping: %+v", r)
+		}
+	}
+	if strings.Contains(stderr.String(), "lp_do_not_leak_me") {
+		t.Errorf("api key leaked into the wrapper's own stderr: %q", stderr.String())
+	}
+}

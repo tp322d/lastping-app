@@ -9,8 +9,13 @@
 // behind exit-code propagation, TTY passthrough and signal handling — all three
 // of which have to be right for this to be safe to put in front of a real job.
 //
-// There is no credential handling and there must not be: the ping URL is
-// unauthenticated by design and the monitor id is the capability.
+// The ping URL itself is unauthenticated by design and the monitor id is the
+// capability; that never changes. LASTPING_API_KEY, when set, is used for one
+// thing only: it is forwarded into the wrapped command's own environment as an
+// OTLP exporter bearer token, so an auto-instrumented agent can export its own
+// trace spans without code changes. It is never used to authenticate a ping,
+// never logged, and never appears in a ping URL — see internal/runner for the
+// injection logic and its boundary.
 package main
 
 import (
@@ -32,6 +37,12 @@ Flags for run:
   --monitor <uuid>   monitor to report to (or set LASTPING_MONITOR)
   --ping-url <url>   ping host (or set LASTPING_PING_URL)
                      default: ` + runner.DefaultPingBase + `
+
+Traces (optional): set LASTPING_API_KEY and the wrapped command's OTel
+exporter is configured automatically — OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+OTEL_RESOURCE_ATTRIBUTES and OTEL_EXPORTER_OTLP_HEADERS are set in its
+environment unless already set. The key is forwarded to the exporter only; it
+is never used to authenticate a ping.
 
 Examples:
   lastping run --monitor 0e0f... -- python my_agent.py
