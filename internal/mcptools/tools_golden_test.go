@@ -76,14 +76,14 @@ var wantTools = []string{
 	"set_alert_template",
 }
 
-// TestGoldenToolCount_Is38 is the regression guard for tool parity with the
+// TestGoldenToolCount_Is39 is the regression guard for tool parity with the
 // hosted MCP server. It fails if a tool is dropped or added without updating
 // wantTools above.
-func TestGoldenToolCount_Is38(t *testing.T) {
-	require.Len(t, wantTools, 38, "wantTools itself must list exactly 38 tools — update it deliberately, alongside internal/mcptools, when parity changes")
+func TestGoldenToolCount_Is39(t *testing.T) {
+	require.Len(t, wantTools, 39, "wantTools itself must list exactly 39 tools — update it deliberately, alongside internal/mcptools, when parity changes")
 
 	got := registeredToolNames(t)
-	require.Len(t, got, 38, "the server must register exactly 38 tools")
+	require.Len(t, got, 39, "the server must register exactly 39 tools")
 
 	want := append([]string(nil), wantTools...)
 	sort.Strings(want)
