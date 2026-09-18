@@ -28,6 +28,7 @@ var toolScopes = map[string]string{
 	"get_incident":          "read",
 	"get_monitor":           "read",
 	"get_ping_instructions": "read",
+	"get_run":               "read",
 	"get_run_history":       "read",
 	"list_agents":           "read",
 	"list_destinations":     "read",
