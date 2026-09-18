@@ -112,6 +112,9 @@ The failure loop: `list_open_incidents` · `add_incident_note`
 
 Alert routing: `set_route`
 
+Delivery log: `list_deliveries` (ships with the next server release) —
+recent alert deliveries across every monitor, no paging
+
 Destinations: `list_destinations` · `create_destination` ·
 `update_destination` · `test_destination` · `delete_destination`
 

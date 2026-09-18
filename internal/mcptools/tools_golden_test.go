@@ -45,6 +45,8 @@ var wantTools = []string{
 	"pause_monitor",
 	"resume_monitor",
 	"snooze_monitor",
+	// deliveries.go (1)
+	"list_deliveries",
 	// discovery.go (1)
 	"discover_monitors_reconcile",
 	// export.go (1)

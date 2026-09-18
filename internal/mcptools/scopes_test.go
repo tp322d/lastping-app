@@ -16,7 +16,7 @@ import (
 // thing a human updates, by reading the hosted server's route table, when a
 // tool's requirement changes.
 var wantToolScopes = map[string]string{
-	// Reads (13).
+	// Reads (14).
 	"export_terraform":      "read",
 	"get_agent":             "read",
 	"get_alert_templates":   "read",
@@ -26,6 +26,7 @@ var wantToolScopes = map[string]string{
 	"get_run":               "read",
 	"get_run_history":       "read",
 	"list_agents":           "read",
+	"list_deliveries":       "read",
 	"list_destinations":     "read",
 	"list_incidents":        "read",
 	"list_monitors":         "read",
