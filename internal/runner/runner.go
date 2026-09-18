@@ -28,10 +28,24 @@
 //     ping changes nothing about the child: not its exit code, not its lifetime,
 //     not its output. Every ping error is a warning line on our own stderr.
 //
-// NO CREDENTIALS. The ping URL is unauthenticated by design — the monitor id IS
-// the capability. There is deliberately no API key handling here; adding some
-// would make a wrapper that anyone can drop into a pipeline into one that needs
-// a secret provisioned first.
+// NO CREDENTIALS ON THE PING PATH. The ping URL is unauthenticated by design —
+// the monitor id IS the capability — and that is unchanged: /start, /cancel and
+// the numeric-code ping are sent exactly as before, with no key, ever, on that
+// path or in any URL or log line this package writes.
+//
+// LASTPING_API_KEY, when present, is used for exactly one thing: forwarding it
+// into the CHILD's environment as an OTEL_EXPORTER_OTLP_HEADERS bearer token,
+// so an auto-instrumented agent can export its own trace spans to LastPing
+// without code changes. It is read once, from the environment the child would
+// have inherited anyway, and never logged, never put in a ping URL or ping
+// body, and never used to authenticate anything this package itself sends. See
+// injectOTelEnv. The injected OTEL_EXPORTER_OTLP_TRACES_ENDPOINT depends on
+// whether a key is present: with one, the Bearer form (<ping host>/v1/traces,
+// authenticated by OTEL_EXPORTER_OTLP_HEADERS); without one, the monitor-URL
+// form (<ping host>/<monitor id>/v1/traces) — the same header-free
+// authentication /start and /cancel already use — so a keyless exporter can
+// actually authenticate instead of getting a 401 from the Bearer-only host
+// route.
 package runner
 
 import (
@@ -158,7 +172,11 @@ func Run(opts Options) (int, error) {
 	rep.post("/start", "")
 
 	cmd := exec.Command(opts.Argv[0], opts.Argv[1:]...)
-	cmd.Env = opts.Env
+	env := opts.Env
+	if env == nil {
+		env = os.Environ()
+	}
+	cmd.Env = injectOTelEnv(env, base, opts.MonitorID, rep.rid)
 	tail := runStdio(cmd, opts)
 
 	if err := cmd.Start(); err != nil {
@@ -368,6 +386,121 @@ func randomRID() string {
 		return strconv.FormatInt(time.Now().UnixNano()&0xffffffff, 16)
 	}
 	return hex.EncodeToString(b[:])
+}
+
+// injectOTelEnv returns env (never mutated) augmented with the OTel variables
+// described in the package doc comment: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT and
+// OTEL_RESOURCE_ATTRIBUTES are injected whenever pingBase's host is known, and
+// OTEL_EXPORTER_OTLP_HEADERS carries a bearer token forwarded from
+// LASTPING_API_KEY — read from env itself, the same place the child would have
+// found it — but only when the child has not already set that header itself.
+// A variable the caller already set is never overridden; a
+// OTEL_RESOURCE_ATTRIBUTES the caller already set is merged, keeping every
+// existing entry and appending only the lastping.* keys not already present.
+//
+// Whether a key is present also decides WHICH endpoint form gets injected
+// (otelTracesEndpoint): the key is read here, before building the endpoint,
+// specifically so that choice can be made once, in one place, rather than the
+// endpoint being picked independently of whether a header ends up alongside
+// it.
+func injectOTelEnv(env []string, pingBase, monitorID, rid string) []string {
+	apiKey, hasKey := lookupEnv(env, "LASTPING_API_KEY")
+	hasKey = hasKey && apiKey != ""
+
+	endpoint := otelTracesEndpoint(pingBase, monitorID, hasKey)
+	if endpoint == "" {
+		return env
+	}
+	out := append([]string(nil), env...)
+
+	if _, ok := lookupEnv(out, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"); !ok {
+		out = append(out, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="+endpoint)
+	}
+
+	existingAttrs, _ := lookupEnv(out, "OTEL_RESOURCE_ATTRIBUTES")
+	out = setEnv(out, "OTEL_RESOURCE_ATTRIBUTES", mergeResourceAttributes(existingAttrs, monitorID, rid))
+
+	if hasKey {
+		if _, ok := lookupEnv(out, "OTEL_EXPORTER_OTLP_HEADERS"); !ok {
+			out = append(out, "OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer "+apiKey)
+		}
+	}
+
+	return out
+}
+
+// otelTracesEndpoint derives the OTLP traces endpoint from pingBase: with a
+// key present (hasKey), the Bearer form "<scheme>://<host>/v1/traces" — the
+// key alone names the project, and lastping.monitor_id in
+// OTEL_RESOURCE_ATTRIBUTES names the check within it. Without one, the
+// monitor-URL form "<scheme>://<host>/<monitor id>/v1/traces" instead: the
+// Bearer-only host route can only ever 401 a headerless exporter, where the
+// monitor-URL form is the SAME no-credentials-needed authentication /start
+// and /cancel already rely on. Returns "" if pingBase does not parse into a
+// URL with both a scheme and a host — the "ping URL's host is known"
+// condition. A test httptest base (http://127.0.0.1:port) parses fine, which
+// is what makes this testable without a real ping host.
+func otelTracesEndpoint(pingBase, monitorID string, hasKey bool) string {
+	u, err := url.Parse(pingBase)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	if hasKey {
+		return u.Scheme + "://" + u.Host + "/v1/traces"
+	}
+	return u.Scheme + "://" + u.Host + "/" + monitorID + "/v1/traces"
+}
+
+// mergeResourceAttributes appends lastping.monitor_id and lastping.run_id to
+// an existing OTEL_RESOURCE_ATTRIBUTES value, keeping every entry already
+// there — including a lastping.monitor_id or lastping.run_id the caller set
+// themselves, which is never overridden.
+func mergeResourceAttributes(existing, monitorID, rid string) string {
+	var parts []string
+	haveMonitorID, haveRID := false, false
+	if existing != "" {
+		for _, p := range strings.Split(existing, ",") {
+			parts = append(parts, p)
+			key, _, _ := strings.Cut(p, "=")
+			switch strings.TrimSpace(key) {
+			case "lastping.monitor_id":
+				haveMonitorID = true
+			case "lastping.run_id":
+				haveRID = true
+			}
+		}
+	}
+	if !haveMonitorID {
+		parts = append(parts, "lastping.monitor_id="+monitorID)
+	}
+	if !haveRID {
+		parts = append(parts, "lastping.run_id="+rid)
+	}
+	return strings.Join(parts, ",")
+}
+
+// lookupEnv finds key in an os.Environ()-shaped slice.
+func lookupEnv(env []string, key string) (string, bool) {
+	prefix := key + "="
+	for _, kv := range env {
+		if strings.HasPrefix(kv, prefix) {
+			return kv[len(prefix):], true
+		}
+	}
+	return "", false
+}
+
+// setEnv sets key to val in an os.Environ()-shaped slice, overwriting an
+// existing entry in place or appending a new one.
+func setEnv(env []string, key, val string) []string {
+	prefix := key + "="
+	for i, kv := range env {
+		if strings.HasPrefix(kv, prefix) {
+			env[i] = prefix + val
+			return env
+		}
+	}
+	return append(env, prefix+val)
 }
 
 // reporter posts the run's pings. Every method is best-effort and returns

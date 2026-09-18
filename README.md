@@ -68,6 +68,26 @@ AI agent told to report on every task will stop doing it, and a cron line you
 meant to add a `curl` to never gets it. A wrapper reports from the process
 lifecycle, so nothing depends on anybody remembering.
 
+### Traces (ships with the next server release)
+
+`lastping run` always configures your wrapped command's OpenTelemetry
+exporter, in its environment only, so an auto-instrumented agent can export
+its own trace spans with no code change:
+
+- `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` — the header-free monitor-URL form
+  (`<ping url>/v1/traces`) when `LASTPING_API_KEY` is not set, so a headerless
+  exporter can still authenticate; the ping host's `/v1/traces` (the Bearer
+  form) when it is set.
+- `OTEL_RESOURCE_ATTRIBUTES` — `lastping.monitor_id=<id>,lastping.run_id=<rid>`
+  appended to whatever you already set, so a trace's spans join the same run
+  the surrounding pings report.
+- `OTEL_EXPORTER_OTLP_HEADERS` — `Authorization=Bearer <your key>`, only when
+  `LASTPING_API_KEY` is set and you have not already set that variable
+  yourself.
+
+Any of the three you already set is left alone. The key is never used to
+authenticate a ping; the ping URL stays unauthenticated by design, as above.
+
 ## MCP server — let an agent set up its own monitoring
 
 ```jsonc
@@ -163,6 +183,16 @@ run's pings and time it.
 # The classic one-liner, at the end of a cron job:
 curl -fsS -m 10 --retry 3 https://ping.lastping.dev/<monitor-id>
 ```
+
+### Traces (ships with the next server release)
+
+`POST https://ping.lastping.dev/v1/traces` accepts an OTLP/HTTP export
+(`application/x-protobuf` or `application/json`, gzip accepted) with a
+`Bearer <write key>` header, or `POST <ping-url>/v1/traces` for exporters that
+cannot set headers. Spans need resource attributes `lastping.monitor_id` and
+`lastping.run_id` to be accepted; a payload is capped at 1 MiB decompressed,
+500 spans per request and 2,000 spans per run. `lastping run` sets all of
+this up for you — see Traces above.
 
 ## Monitoring as code
 
