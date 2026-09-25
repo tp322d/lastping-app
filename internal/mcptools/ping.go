@@ -39,7 +39,8 @@ func registerPingTools(s *server.MCPServer, pingHost string) {
 				"If you ARE Claude Code specifically, `hook_install` is available as an OPTIONAL SHORTCUT, not a better tier: a one-time install that binds "+
 				"reporting to Claude Code's own hooks (UserPromptSubmit, Stop, StopFailure), automating how_to's exact same protocol so reporting becomes a "+
 				"property of your event loop instead of something you must remember — and it is the only mechanism that can send every state this product "+
-				"models, including blocked and note. hook_install is Claude Code specific: if you are a DIFFERENT AI agent — even one with its own hook or "+
+				"models, including blocked and note. Re-running hook_install replaces an older ~/.claude/lastping-report.sh (keeping a .bak), which is how an "+
+				"existing install is upgraded. hook_install is Claude Code specific: if you are a DIFFERENT AI agent — even one with its own hook or "+
 				"event system, Cursor, Windsurf, Codex, a custom framework — do NOT translate its steps into your own hooks; the event semantics differ and a "+
 				"translated install can pass its own verification while never reporting, so use `how_to` instead. "+
 				"If what you are monitoring is launched as a command instead — a cron job, a CI step, a script, or an agent started from a shell — use "+
@@ -51,7 +52,14 @@ func registerPingTools(s *server.MCPServer, pingHost string) {
 				"Also read `expectations_how_to`: before you start work, use declare_run_expectations to say how THIS run should be judged when it closes — "+
 				"a one-time, unchangeable commitment that replaces the run grading itself. "+
 				"And `discovery_how_to`, which is about the OTHER jobs on this host or in this repo: how to find the scheduled work nobody is watching yet "+
-				"and propose it, rather than monitoring only the one thing you were asked about."),
+				"and propose it, rather than monitoring only the one thing you were asked about. "+
+				"To send OpenTelemetry traces, read `tracing_how_to`, call get_trace_setup with the tool that sends the telemetry and carry "+
+				"its steps out yourself; the tracing key comes from create_ingest_key, never from your own API key. "+
+				"`otel_env_lines` is the minimal form: the `export` lines (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL, "+
+				"OTEL_RESOURCE_ATTRIBUTES, OTEL_EXPORTER_OTLP_HEADERS) to set in the child process's environment so its spans arrive on this "+
+				"monitor; fill in the tracing key placeholder yourself, it is not resolved server-side. An exporter that cannot set "+
+				"headers can instead POST straight to `<ping_url>/v1/traces`: the monitor-URL form needs no Authorization header at all, since the monitor "+
+				"id in the URL is itself the capability."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID (from create_monitor or list_monitors)."))),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -156,6 +164,22 @@ type PingInstructions struct {
 	// rendered output into a generic map so a dropped field fails on a missing
 	// key rather than passing on both sides equally.
 	DiscoveryHowTo string `json:"discovery_how_to"`
+	// OtelTracesEndpoint, OtelResourceAttributes, OtelHeadersHint and
+	// OtelEnvLines mirror the API struct's fields of the same name verbatim:
+	// where to send OpenTelemetry traces for this monitor and the environment
+	// lines that do it. Declared here, byte-for-byte matching, for the same
+	// reason every other field on this struct is: an MCP client decodes this
+	// exact shape.
+	OtelTracesEndpoint     string   `json:"otel_traces_endpoint"`
+	OtelResourceAttributes string   `json:"otel_resource_attributes"`
+	OtelHeadersHint        string   `json:"otel_headers_hint"`
+	OtelEnvLines           []string `json:"otel_env_lines"`
+	// TracingHowTo mirrors the API struct's field of the same name, for the
+	// reason DiscoveryHowTo's comment gives: a proxy that decodes into this
+	// struct silently drops what it does not name. The per-tool set-up blocks
+	// are get_trace_setup's, not this tool's: carrying all eight here made
+	// every get_ping_instructions call pay for set-up it rarely needs.
+	TracingHowTo string `json:"tracing_how_to"`
 }
 
 // getPingInstructions proxies to GET /api/v1/checks/{id}/ping-instructions

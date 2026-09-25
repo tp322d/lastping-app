@@ -66,7 +66,12 @@ const pingInstructionsJSON = `{
   "how_to_steps": "Stall detection is ARMED on this monitor: step_timeout_s=300.",
   "expectations_how_to": "Call declare_run_expectations before you start work...",
   "failure_inbox_how_to": "Check GET /api/v1/agents/{id}/open-incidents before you start work...",
-  "discovery_how_to": "Scan the repo, propose what you found, then POST /api/v1/discovery/reconcile..."
+  "discovery_how_to": "Scan the repo, propose what you found, then POST /api/v1/discovery/reconcile...",
+  "otel_traces_endpoint": "https://ping.lastping.dev/v1/traces",
+  "otel_resource_attributes": "lastping.monitor_id=abc-123",
+  "otel_headers_hint": "Authorization=Bearer <your tracing key>",
+  "otel_env_lines": ["export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=\"https://ping.lastping.dev/v1/traces\""],
+  "tracing_how_to": "TRACING: send OpenTelemetry traces to the LastPing monitor... fetch its set-up block with get_trace_setup"
 }`
 
 // TestGetPingInstructions_ProxiesToTheRightEndpoint verifies the tool calls
@@ -169,6 +174,11 @@ func TestGetPingInstructions_IncludesEveryHowToField(t *testing.T) {
 		"expectations_how_to",
 		"failure_inbox_how_to",
 		"discovery_how_to",
+		"otel_traces_endpoint",
+		"otel_resource_attributes",
+		"otel_headers_hint",
+		"otel_env_lines",
+		"tracing_how_to",
 	} {
 		require.Contains(t, served, field, "fixture is missing %s; the assertion below would be vacuous", field)
 		assert.Equal(t, served[field], got[field],
@@ -247,7 +257,8 @@ const wantGetPingInstructionsDesc = "" +
 	"If you ARE Claude Code specifically, `hook_install` is available as an OPTIONAL SHORTCUT, not a better tier: a one-time install that binds " +
 	"reporting to Claude Code's own hooks (UserPromptSubmit, Stop, StopFailure), automating how_to's exact same protocol so reporting becomes a " +
 	"property of your event loop instead of something you must remember — and it is the only mechanism that can send every state this product " +
-	"models, including blocked and note. hook_install is Claude Code specific: if you are a DIFFERENT AI agent — even one with its own hook or " +
+	"models, including blocked and note. Re-running hook_install replaces an older ~/.claude/lastping-report.sh (keeping a .bak), which is how an " +
+	"existing install is upgraded. hook_install is Claude Code specific: if you are a DIFFERENT AI agent — even one with its own hook or " +
 	"event system, Cursor, Windsurf, Codex, a custom framework — do NOT translate its steps into your own hooks; the event semantics differ and a " +
 	"translated install can pass its own verification while never reporting, so use `how_to` instead. " +
 	"If what you are monitoring is launched as a command instead — a cron job, a CI step, a script, or an agent started from a shell — use " +
@@ -259,7 +270,14 @@ const wantGetPingInstructionsDesc = "" +
 	"Also read `expectations_how_to`: before you start work, use declare_run_expectations to say how THIS run should be judged when it closes — " +
 	"a one-time, unchangeable commitment that replaces the run grading itself. " +
 	"And `discovery_how_to`, which is about the OTHER jobs on this host or in this repo: how to find the scheduled work nobody is watching yet " +
-	"and propose it, rather than monitoring only the one thing you were asked about."
+	"and propose it, rather than monitoring only the one thing you were asked about. " +
+	"To send OpenTelemetry traces, read `tracing_how_to`, call get_trace_setup with the tool that sends the telemetry and carry " +
+	"its steps out yourself; the tracing key comes from create_ingest_key, never from your own API key. " +
+	"`otel_env_lines` is the minimal form: the `export` lines (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL, " +
+	"OTEL_RESOURCE_ATTRIBUTES, OTEL_EXPORTER_OTLP_HEADERS) to set in the child process's environment so its spans arrive on this " +
+	"monitor; fill in the tracing key placeholder yourself, it is not resolved server-side. An exporter that cannot set " +
+	"headers can instead POST straight to `<ping_url>/v1/traces`: the monitor-URL form needs no Authorization header at all, since the monitor " +
+	"id in the URL is itself the capability."
 
 // TestGetPingInstructions_PreservesLiteralAmpersandsAndPlaceholders guards the
 // HTML-escaping-off requirement (marshalSnippets): every URL in this payload
@@ -318,4 +336,33 @@ func TestGetPingInstructions_NotFound(t *testing.T) {
 
 	result := callTool(t, s, c, "get_ping_instructions", map[string]interface{}{"id": "missing"})
 	assert.True(t, result.IsError, "expected error result for 404")
+}
+
+// TestGetPingInstructions_NeverRendersTraceSetupBlocks: the eight per-tool
+// set-up blocks are get_trace_setup's, not this tool's, so every
+// get_ping_instructions call stays small. Even a server that still serves
+// trace_setup does not get them through: the mirror struct does not name the
+// field. Positive companion: tracing_how_to, which points at
+// get_trace_setup, still arrives.
+func TestGetPingInstructions_NeverRendersTraceSetupBlocks(t *testing.T) {
+	older := strings.TrimSuffix(strings.TrimSpace(pingInstructionsJSON), "}") +
+		`, "trace_setup": [{"tool":"otel-sdk","title":"Any OpenTelemetry SDK","limits":"a block only get_trace_setup returns"}]}`
+	var probe map[string]any
+	require.NoError(t, json.Unmarshal([]byte(older), &probe), "the older-server fixture must be valid JSON")
+	require.Contains(t, probe, "trace_setup")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(older))
+	}))
+	defer srv.Close()
+
+	result := callTool(t, newTestServer(t, "https://ping.lastping.dev"), mcptools.NewAPIClient(srv.URL, "k"),
+		"get_ping_instructions", map[string]interface{}{"id": "abc-123"})
+	require.False(t, result.IsError)
+	text := resultText(t, result)
+	assert.NotContains(t, text, `"trace_setup":`)
+	assert.NotContains(t, text, "a block only get_trace_setup returns")
+	assert.Contains(t, text, `"tracing_how_to"`)
+	assert.Contains(t, text, "get_trace_setup")
 }

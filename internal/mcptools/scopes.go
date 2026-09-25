@@ -22,32 +22,44 @@ package mcptools
 // needs: "read", "write" or "admin".
 var toolScopes = map[string]string{
 	// Reads.
-	"export_terraform":      "read",
-	"get_agent":             "read",
-	"get_alert_templates":   "read",
-	"get_incident":          "read",
-	"get_monitor":           "read",
-	"get_ping_instructions": "read",
-	"get_run":               "read",
-	"get_run_history":       "read",
-	"list_agents":           "read",
-	"list_deliveries":       "read",
-	"list_destinations":     "read",
-	"list_incidents":        "read",
-	"list_monitors":         "read",
-	"list_open_incidents":   "read",
-	"list_status_pages":     "read",
+	"export_terraform":       "read",
+	"get_agent":              "read",
+	"get_agent_dependencies": "read",
+	"get_agent_usage":        "read",
+	"get_alert_templates":    "read",
+	"get_incident":           "read",
+	"get_monitor":            "read",
+	"get_ping_instructions":  "read",
+	"get_run":                "read",
+	"get_run_history":        "read",
+	"get_trace_diagnostics":  "read",
+	"get_trace_setup":        "read",
+	"list_agents":            "read",
+	"list_deliveries":        "read",
+	"list_dependencies":      "read",
+	"list_destinations":      "read",
+	"list_discovered_agents": "read",
+	"list_incidents":         "read",
+	"list_monitors":          "read",
+	"list_open_incidents":    "read",
+	"list_runs":              "read",
+	"list_status_pages":      "read",
 
 	// Writes — everything that changes LastPing state, plus test_destination,
 	// which changes none of it but sends a real message to a third party.
-	"add_incident_note":           "write",
-	"create_destination":          "write",
+	"add_incident_note":      "write",
+	"adopt_discovered_agent": "write",
+	"create_destination":     "write",
+	// Mints ONLY an ingest key bound to one monitor, which is why a write key
+	// may call it; create_api_key stays admin.
+	"create_ingest_key":           "write",
 	"create_monitor":              "write",
 	"create_status_page":          "write",
 	"declare_run_expectations":    "write",
 	"delete_agent":                "write",
 	"delete_destination":          "write",
 	"delete_monitor":              "write",
+	"delete_route":                "write",
 	"delete_status_page":          "write",
 	"discover_monitors_reconcile": "write",
 	"pause_monitor":               "write",
@@ -65,9 +77,10 @@ var toolScopes = map[string]string{
 	// Key management. The LIST is admin too: it returns no secret, but key
 	// names, prefixes, expiries and lineage are what a caller needs in order to
 	// choose which key to revoke.
-	"create_api_key": "admin",
-	"list_api_keys":  "admin",
-	"revoke_api_key": "admin",
+	"create_api_key":     "admin",
+	"list_api_keys":      "admin",
+	"regenerate_api_key": "admin",
+	"revoke_api_key":     "admin",
 }
 
 // scopeSentence is the exact sentence prepended to a tool's description. One

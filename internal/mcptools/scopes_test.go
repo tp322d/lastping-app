@@ -16,33 +16,45 @@ import (
 // thing a human updates, by reading the hosted server's route table, when a
 // tool's requirement changes.
 var wantToolScopes = map[string]string{
-	// Reads (14).
-	"export_terraform":      "read",
-	"get_agent":             "read",
-	"get_alert_templates":   "read",
-	"get_incident":          "read",
-	"get_monitor":           "read",
-	"get_ping_instructions": "read",
-	"get_run":               "read",
-	"get_run_history":       "read",
-	"list_agents":           "read",
-	"list_deliveries":       "read",
-	"list_destinations":     "read",
-	"list_incidents":        "read",
-	"list_monitors":         "read",
-	"list_open_incidents":   "read",
-	"list_status_pages":     "read",
+	// Reads (22).
+	"export_terraform":       "read",
+	"get_agent":              "read",
+	"get_agent_dependencies": "read",
+	"get_agent_usage":        "read",
+	"get_alert_templates":    "read",
+	"get_incident":           "read",
+	"get_monitor":            "read",
+	"get_ping_instructions":  "read",
+	"get_run":                "read",
+	"get_run_history":        "read",
+	"get_trace_diagnostics":  "read",
+	"get_trace_setup":        "read",
+	"list_agents":            "read",
+	"list_deliveries":        "read",
+	"list_dependencies":      "read",
+	"list_destinations":      "read",
+	"list_discovered_agents": "read",
+	"list_incidents":         "read",
+	"list_monitors":          "read",
+	"list_open_incidents":    "read",
+	"list_runs":              "read",
+	"list_status_pages":      "read",
 
-	// Writes (21) — test_destination is here because it sends a real message
-	// to a third party, even though it changes no LastPing state.
+	// Writes (24) — test_destination is here because it sends a real message
+	// to a third party, even though it changes no LastPing state, and
+	// create_ingest_key because it mints only a tracing key bound to one
+	// monitor, which a write key may do.
 	"add_incident_note":           "write",
+	"adopt_discovered_agent":      "write",
 	"create_destination":          "write",
+	"create_ingest_key":           "write",
 	"create_monitor":              "write",
 	"create_status_page":          "write",
 	"declare_run_expectations":    "write",
 	"delete_agent":                "write",
 	"delete_destination":          "write",
 	"delete_monitor":              "write",
+	"delete_route":                "write",
 	"delete_status_page":          "write",
 	"discover_monitors_reconcile": "write",
 	"pause_monitor":               "write",
@@ -57,12 +69,13 @@ var wantToolScopes = map[string]string{
 	"update_monitor":              "write",
 	"update_status_page":          "write",
 
-	// Key management (3). The LIST is admin too: it returns no secret, but key
+	// Key management (4). The LIST is admin too: it returns no secret, but key
 	// names, prefixes, expiries and lineage are what a caller needs in order
 	// to choose which key to revoke.
-	"create_api_key": "admin",
-	"list_api_keys":  "admin",
-	"revoke_api_key": "admin",
+	"create_api_key":     "admin",
+	"list_api_keys":      "admin",
+	"regenerate_api_key": "admin",
+	"revoke_api_key":     "admin",
 }
 
 // registeredNames returns every tool Register adds, read off a real server.
@@ -119,8 +132,8 @@ func TestToolScopes_TableHasNoRowForAToolThatDoesNotExist(t *testing.T) {
 // server's route table fails here rather than being discovered by an agent
 // holding the wrong credential.
 func TestToolScopes_MatchTheHostedServer(t *testing.T) {
-	require.Len(t, wantToolScopes, 39,
-		"the hosted server exposes 39 tools; update wantToolScopes deliberately when that changes")
+	require.Len(t, wantToolScopes, 50,
+		"the hosted server exposes 50 tools; update wantToolScopes deliberately when that changes")
 	require.Equal(t, wantToolScopes, toolScopes,
 		"toolScopes has drifted from the hosted server's per-tool requirement")
 }

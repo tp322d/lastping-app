@@ -104,32 +104,41 @@ func writes(destructive, idempotent bool) mcp.ToolAnnotation {
 //
 // Grouped by character rather than alphabetically so that a wrong row is
 // visible as a row in the wrong group, which is easier to spot in review than
-// a wrong boolean in a long sorted list.
+// a wrong boolean in a long sorted list. Alphabetical within each group.
 var toolAnnotations = map[string]mcp.ToolAnnotation{
 	// ── Read-only ────────────────────────────────────────────────────────
-	"export_terraform":      readOnly(),
-	"get_agent":             readOnly(),
-	"get_alert_templates":   readOnly(),
-	"get_incident":          readOnly(),
-	"get_monitor":           readOnly(),
-	"get_ping_instructions": readOnly(),
-	"get_run":               readOnly(),
-	"get_run_history":       readOnly(),
-	"list_agents":           readOnly(),
-	"list_api_keys":         readOnly(),
-	"list_deliveries":       readOnly(),
-	"list_destinations":     readOnly(),
-	"list_incidents":        readOnly(),
-	"list_monitors":         readOnly(),
-	"list_open_incidents":   readOnly(),
-	"list_status_pages":     readOnly(),
+	"export_terraform":       readOnly(),
+	"get_agent":              readOnly(),
+	"get_agent_dependencies": readOnly(),
+	"get_agent_usage":        readOnly(),
+	"get_alert_templates":    readOnly(),
+	"get_incident":           readOnly(),
+	"get_monitor":            readOnly(),
+	"get_ping_instructions":  readOnly(),
+	"get_run":                readOnly(),
+	"get_run_history":        readOnly(),
+	"get_trace_diagnostics":  readOnly(),
+	"get_trace_setup":        readOnly(),
+	"list_agents":            readOnly(),
+	"list_api_keys":          readOnly(),
+	"list_deliveries":        readOnly(),
+	"list_dependencies":      readOnly(),
+	"list_destinations":      readOnly(),
+	"list_discovered_agents": readOnly(),
+	"list_incidents":         readOnly(),
+	"list_monitors":          readOnly(),
+	"list_open_incidents":    readOnly(),
+	"list_runs":              readOnly(),
+	"list_status_pages":      readOnly(),
 
 	// ── Destructive: removes state, and cannot be undone ─────────────────
 	// Deleting twice leaves the same absence, so all of these are idempotent.
 	"delete_agent":       writes(true, true),
 	"delete_destination": writes(true, true),
 	"delete_monitor":     writes(true, true),
+	"delete_route":       writes(true, true),
 	"delete_status_page": writes(true, true),
+	"regenerate_api_key": writes(true, false),
 	"revoke_api_key":     writes(true, true),
 
 	// ── Destructive: overwrites state that already existed ───────────────
@@ -153,13 +162,15 @@ var toolAnnotations = map[string]mcp.ToolAnnotation{
 	// re-running discovery against an unchanged repo). Not idempotent where
 	// each call produces another object or another delivery.
 	"add_incident_note":           writes(false, false),
+	"adopt_discovered_agent":      writes(false, true),
 	"create_api_key":              writes(false, false),
 	"create_destination":          writes(false, false),
+	"create_ingest_key":           writes(false, false),
 	"create_status_page":          writes(false, false),
-	"register_agent":              writes(false, false),
 	"declare_run_expectations":    writes(false, true),
 	"discover_monitors_reconcile": writes(false, true),
 	"pause_monitor":               writes(false, true),
+	"register_agent":              writes(false, false),
 	"resume_monitor":              writes(false, true),
 	"snooze_monitor":              writes(false, true),
 }

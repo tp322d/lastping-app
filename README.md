@@ -114,7 +114,7 @@ go install github.com/tp322d/lastping-app/cmd/lastping-mcp@latest
 ```
 
 <details>
-<summary><b>Tools in this repository's stdio binary (38)</b></summary>
+<summary><b>Tools in this repository's stdio binary (50)</b></summary>
 
 Monitors: `create_monitor` · `get_monitor` · `list_monitors` ·
 `update_monitor` · `delete_monitor` · `pause_monitor` · `resume_monitor` ·
@@ -125,12 +125,20 @@ Discovery: `discover_monitors_reconcile`
 Reporting: `get_ping_instructions` · `declare_run_expectations`
 
 Incidents & runs: `list_incidents` · `get_run_history` · `get_run`
-(one run's full timeline and assertion verdicts) · `get_incident`
-(one incident's recorded timeline)
+(one run's full timeline, assertion verdicts and spans) · `list_runs`
+(runs across every monitor, traced runs included, with filters) ·
+`get_incident` (one incident's recorded timeline)
+
+Tracing: `get_trace_setup` (the set-up steps for one tool, from the server) ·
+`create_ingest_key` (a tracing key bound to one monitor; a write key is
+enough) · `get_trace_diagnostics` (why a sent span was refused)
+
+Agent observability: `get_agent_dependencies` · `get_agent_usage` ·
+`list_dependencies` · `list_discovered_agents` · `adopt_discovered_agent`
 
 The failure loop: `list_open_incidents` · `add_incident_note`
 
-Alert routing: `set_route`
+Alert routing: `set_route` · `delete_route`
 
 Delivery log: `list_deliveries` (ships with the next server release) —
 recent alert deliveries across every monitor, no paging
@@ -146,8 +154,9 @@ Agent registry: `register_agent` · `list_agents` · `get_agent` ·
 Status pages: `list_status_pages` · `create_status_page` ·
 `update_status_page` · `delete_status_page`
 
-API keys: `create_api_key` (optional `scope`: read / write / admin) ·
-`list_api_keys` · `revoke_api_key` (cascades to every key it created)
+API keys: `create_api_key` (optional `scope`: read / write / admin / ingest) ·
+`list_api_keys` · `regenerate_api_key` (new secret, same key; does not
+cascade) · `revoke_api_key` (cascades to every key it created)
 
 Terraform: `export_terraform`
 
@@ -188,7 +197,8 @@ curl -fsS -m 10 --retry 3 https://ping.lastping.dev/<monitor-id>
 
 `POST https://ping.lastping.dev/v1/traces` accepts an OTLP/HTTP export
 (`application/x-protobuf` or `application/json`, gzip accepted) with a
-`Bearer <write key>` header, or `POST <ping-url>/v1/traces` for exporters that
+`Bearer` key (an `ingest` key bound to the monitor, from `create_ingest_key`;
+a write or admin key also works), or `POST <ping-url>/v1/traces` for exporters that
 cannot set headers. Spans need resource attributes `lastping.monitor_id` and
 `lastping.run_id` to be accepted; a payload is capped at 1 MiB decompressed,
 500 spans per request and 2,000 spans per run. `lastping run` sets all of

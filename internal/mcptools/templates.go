@@ -70,13 +70,18 @@ func registerTemplateTools(s *server.MCPServer) {
 				"Available variables: {check_name}, {event}, {status}, {cause}, {last_ping}, {schedule}, "+
 				"{incident_url}, {run_url}, {branch}, {commit}, {actor}, {failing_stage}, "+
 				"{duration}, {latency}, {status_code}, {url}, {last_step}, {step_count}, "+
-				"{run_duration}, {body}, {detail}. "+
+				"{run_duration}, {body}, {detail}, {title}. "+
 				"{failing_stage} is CI-only and provider-dependent: always populated on GitLab; on "+
 				"GitHub only if the repository webhook also subscribes to the workflow_job event; "+
 				"never on Jenkins, whose Notification Plugin payload carries no step detail. "+
 				"{body} is the triggering ping's own text (pings.body_excerpt) — it is how a 'blocked' "+
 				"or 'note' event's reason reaches the alert, and a custom template is the only way to "+
-				"control where in the message it appears."),
+				"control where in the message it appears. "+
+				"{title} is the title of the run the alert is about — the free-text body posted with "+
+				"that run's /start ping. Populated for 'fail' (when the failing ping's rid resolves to "+
+				"a titled /start) and for 'stalled'/'overrun' under the same run-identification rule as "+
+				"{last_step}; empty otherwise, including for any run with no title, which is every run "+
+				"until a caller starts posting one."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),
 			mcp.WithString("event_type", mcp.Required(), mcp.Description(
 				"Event type: "+eventTypeList()+".")),
