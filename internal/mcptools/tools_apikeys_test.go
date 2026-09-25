@@ -74,7 +74,7 @@ func TestCreateAPIKey_OmittedScopeIsNotSent(t *testing.T) {
 		"the tier the API chose must still be reported back to the agent")
 }
 
-// TestCreateAPIKey_ScopeIsAnEnumInTheSchema — the three tiers have to be in the
+// TestCreateAPIKey_ScopeIsAnEnumInTheSchema — the four scopes have to be in the
 // input schema, not only in prose. An agent that guesses "readonly" or "rw"
 // spends a round trip finding out; the enum is what stops the guess.
 func TestCreateAPIKey_ScopeIsAnEnumInTheSchema(t *testing.T) {
@@ -87,8 +87,8 @@ func TestCreateAPIKey_ScopeIsAnEnumInTheSchema(t *testing.T) {
 	schema, ok := raw.(map[string]any)
 	require.True(t, ok, "scope has an unexpected schema shape %T", raw)
 
-	require.Equal(t, []string{"read", "write", "admin"}, schema["enum"],
-		"scope must advertise exactly the three tiers the API accepts")
+	require.Equal(t, []string{"read", "write", "admin", "ingest"}, schema["enum"],
+		"scope must advertise exactly the four scopes the API accepts")
 	require.NotContains(t, st.Tool.InputSchema.Required, "scope",
 		"scope is optional — the API defaults it to write")
 }

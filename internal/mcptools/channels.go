@@ -120,7 +120,7 @@ func registerChannelTools(s *server.MCPServer) {
 					"For any other endpoint use kind \"webhook\", which accepts any https host; ntfy is unpinned too, "+
 					"so a self-hosted ntfy server is fine. A pin narrows the destination to the vendor's own platform; "+
 					"it does NOT prove the endpoint belongs to the person or project that created it, because every "+
-					"pinned domain is multi-tenant and self-service. Do not report a pinned destination as verified or "+
+					"pinned domain is multi-tenant and open to anyone who signs up. Do not report a pinned destination as verified or "+
 					"as owned by anyone on the strength of its host.")),
 			mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable destination name, e.g. 'On-call Slack'.")),
 			mcp.WithString("url", mcp.Description("webhook: the POST target URL.")),

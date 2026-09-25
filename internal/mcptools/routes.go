@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -20,6 +21,7 @@ type Route struct {
 }
 
 func registerRouteTools(s *server.MCPServer) {
+	registerDeleteRouteTool(s)
 	s.AddTool(
 		newTool("set_route",
 			mcp.WithDescription("Route a monitor's alerts for one event type to a set of destinations (channels). "+
@@ -66,6 +68,75 @@ func registerRouteTools(s *server.MCPServer) {
 			return c.setRoute(ctx, monitorID, eventType, splitIDs(ids))
 		},
 	)
+}
+
+// routeEventTypes is every event type a route can carry, as the API
+// validates it.
+var routeEventTypes = []string{"down", "recovery", "fail", "every-run", "success", "started", "blocked", "note"}
+
+// registerDeleteRouteTool registers delete_route, the proxy for DELETE
+// /api/v1/checks/{id}/routes/{event_type}. set_route REPLACES the whole
+// destination set of an event type, so before this tool unrouting one event
+// meant calling set_route with an empty set and trusting nothing else was
+// touched; delete_route names the one event type and cannot reach another.
+func registerDeleteRouteTool(s *server.MCPServer) {
+	s.AddTool(
+		newTool("delete_route",
+			mcp.WithDescription("Stop routing ONE event type of a monitor to any destination: its alerts for that event go nowhere "+
+				"afterwards. Every other event type's routing on the monitor is left exactly as it was. To drop one destination but "+
+				"keep the rest for the same event type, call get_monitor and then set_route with the remaining ids instead. "+
+				"An event type with no routing answers \"route not found\"."),
+			mcp.WithString("monitor_id", mcp.Required(), mcp.Description("Monitor (check) UUID.")),
+			mcp.WithString("event_type", mcp.Required(), mcp.Enum(routeEventTypes...),
+				mcp.Description("The event type to unroute: down, recovery, fail, every-run, success, started, blocked or note.")),
+		),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			c, err := clientFromContext(ctx)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			monitorID, err := req.RequireString("monitor_id")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			eventType, err := req.RequireString("event_type")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			return c.deleteRoute(ctx, monitorID, eventType)
+		},
+	)
+}
+
+// deleteRoute issues DELETE /api/v1/checks/{id}/routes/{event_type}.
+func (c *APIClient) deleteRoute(ctx context.Context, monitorID, eventType string) (*mcp.CallToolResult, error) {
+	target := fmt.Sprintf("%s/api/v1/checks/%s/routes/%s", c.BaseURL, url.PathEscape(monitorID), url.PathEscape(eventType))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodDelete, target, nil)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to build request: %v", err)), nil
+	}
+	c.auth(httpReq)
+	resp, err := c.HTTP.Do(httpReq)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("API request failed: %v", err)), nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNoContent {
+		return mcp.NewToolResultText(fmt.Sprintf(
+			"Removed the %q routing from monitor %s. Its other event types are routed as before.", eventType, monitorID)), nil
+	}
+	info, perr := c.problemDetail(resp)
+	if resp.StatusCode == http.StatusNotFound {
+		// Two different 404s: the monitor is not in this project, or it is
+		// and has no routing for this event type. The detail tells them
+		// apart, and the second is not something to retry.
+		if info.Detail == "route not found" {
+			return mcp.NewToolResultError(fmt.Sprintf(
+				"Monitor %s has no %q routing, so there was nothing to remove. get_monitor shows its routes.", monitorID, eventType)), nil
+		}
+		return mcp.NewToolResultError(fmt.Sprintf("Monitor not found: id=%s. Use list_monitors to find valid IDs.", monitorID)), nil
+	}
+	return mcp.NewToolResultError(perr.Error()), nil
 }
 
 // getRoutes reads a monitor's whole routing table (GET

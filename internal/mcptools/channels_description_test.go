@@ -104,13 +104,13 @@ func TestCreateDestination_KindParamSaysWhatIsUnpinned(t *testing.T) {
 // TestCreateDestination_KindParamCarriesTheOwnershipCaveat is the assertion
 // that matters most for how an agent REPORTS what it built. A pin narrows the
 // target to the vendor's platform; every one of those domains is multi-tenant
-// and self-service, so the pin proves nothing about who owns the endpoint. An
+// and open to anyone who signs up, so the pin proves nothing about who owns the endpoint. An
 // agent that summarises "verified Slack destination" on the strength of the
 // host has told its user something false.
 func TestCreateDestination_KindParamCarriesTheOwnershipCaveat(t *testing.T) {
 	desc := paramDescription(t, "create_destination", "kind")
 	require.Contains(t, desc, "does NOT prove the endpoint belongs to")
-	require.Contains(t, desc, "multi-tenant and self-service")
+	require.Contains(t, desc, "multi-tenant and open to anyone who signs up")
 	require.Contains(t, desc, "Do not report a pinned destination as verified")
 }
 

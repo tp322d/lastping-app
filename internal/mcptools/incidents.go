@@ -75,8 +75,12 @@ func registerIncidentTools(s *server.MCPServer) {
 	s.AddTool(
 		newTool("get_run_history",
 			mcp.WithDescription("Get structured run history for a monitor — both CI/CD runs and agent/heartbeat runs. "+
+				"It lists runs from pings only: a run that exists only as OpenTelemetry traces is not here, and it takes no filters; "+
+				"use list_runs for traced runs, for runs across every monitor, and to filter by outcome (including unfinished), agent, "+
+				"dependency, model, error or cost. "+
 				"Each run carries its run id (rid), kind, received_at, the progress steps reported under it "+
-				"(steps: seq, name, at), and the correlated incident log excerpt (incident_detail) with resolution status. "+
+				"(steps: seq, name, at), its title (the free-text body posted with its /start ping, when one "+
+				"was), and the correlated incident log excerpt (incident_detail) with resolution status. "+
 				"A run that stalled tells you which step it reached and when it stopped moving — no need to follow "+
 				"links to the CI provider. steps is absent for a run that reported none — steps are matched on rid, "+
 				"so they appear only when the job or agent posted /step?rid= with the same run id it started with. "+

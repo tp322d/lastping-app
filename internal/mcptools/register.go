@@ -22,4 +22,6 @@ func Register(s *server.MCPServer, pingHost string) {
 	registerFailureInboxTools(s)
 	registerDiscoveryTools(s)
 	registerDeliveryTools(s)
+	registerTraceSetupTools(s)
+	registerObservabilityTools(s)
 }

@@ -84,6 +84,12 @@ type Check struct {
 	// list_monitors and omitted when the monitor has no routes.
 	Routes []Route `json:"routes,omitempty"`
 
+	// TraceContent is what this monitor's traces keep of prompt, command and
+	// tool content: "dropped" (the default) or "redacted" (a person opted
+	// in; secret-shaped values are redacted at ingest). Always present on
+	// the wire.
+	TraceContent string `json:"trace_content,omitempty"`
+
 	// MonitorFrom is the dormancy start: no deadline is computed before it.
 	// nil means "armed immediately".
 	MonitorFrom *string `json:"monitor_from,omitempty"`
@@ -251,13 +257,23 @@ const (
 		"SET-ONCE: ci_provider can only be chosen when the monitor is created — update_monitor cannot change or remove it, so a monitor bound to the wrong provider must be deleted and recreated. " +
 		"Setting it generates a webhook secret that is returned exactly ONCE, in THIS call's response, together with the webhook URL. It is never retrievable afterwards — " +
 		"no MCP tool and no API read returns it again — so copy both out of the response and configure the CI webhook before doing anything else. " +
-		"Omit for a monitor that pings for itself. Also set ci_workflow and ci_branch unless the repository really has exactly one workflow on one branch."
+		"Omit for a monitor that pings for itself. Also set ci_workflow and ci_branch unless the repository really has exactly one workflow on one branch. " +
+		"NOT ACCEPTED on monitor_type='http': an http probe is never bound to CI, and the API returns 400 FIELD_NOT_IN_SHAPE. It used to accept the provider, " +
+		"create no binding, and report success."
 
-	ciWorkflowDesc = "CI filter: only count runs of the workflow / pipeline / job with this exact name. Requires ci_provider. " +
+	ciWorkflowDesc = "CI filter: only count runs of the workflow / pipeline / job with this exact name. REQUIRES ci_provider, and the API enforces it: " +
+		"without a CI binding this filter has nowhere to be stored, so the request is refused with 400 FIELD_NOT_IN_SHAPE rather than accepted and discarded. " +
+		"Note that monitor_type='ci' does NOT bind anything on its own — ci_provider does. " +
+		"ONE EXCEPTION, and it is on the path agents use most, so do not rely on the enforcement here: create_monitor on a slug that ALREADY EXISTS is an upsert, " +
+		"and the upsert never writes this filter. With ci_provider in the same call the request is accepted and the filter is silently discarded; without it the " +
+		"request is refused, and doing what the error advises — adding ci_provider — reaches the discarding case instead. Set this filter with update_monitor, " +
+		"which does persist it. " +
 		"WITHOUT IT, EVERY workflow in the repository reports to this monitor — so one unrelated failing workflow opens an incident against a job that is perfectly healthy, " +
 		"and a green run of a different workflow clears an incident the real job never recovered from. Set it whenever the repository has more than one workflow."
 
-	ciBranchDesc = "CI filter: only count runs on this branch, e.g. 'main'. Requires ci_provider. " +
+	ciBranchDesc = "CI filter: only count runs on this branch, e.g. 'main'. REQUIRES ci_provider, and the API enforces it: without a CI binding the request " +
+		"is refused with 400 FIELD_NOT_IN_SHAPE rather than accepted and discarded. " +
+		"Subject to the SAME upsert exception as ci_workflow — create_monitor on an existing slug never writes this filter; use update_monitor. " +
 		"WITHOUT IT a run on ANY branch — a feature branch, a fork's pull request — reports to this monitor, so somebody else's broken branch marks your monitor down. " +
 		"Set it to the branch whose health you actually care about, which is almost always the default branch."
 
@@ -302,7 +318,21 @@ const (
 		"IMPORTANT: if you would be alarmed to find this agent silent for hours, set expect_every_s as well — it is the silence floor, and it is the only thing that " +
 		"makes an on_demand monitor detect absence at all. Choose 'simple'/'cron' when the agent is supposed to run on a cadence; choose " +
 		"'on_demand' when invocation is inherently irregular and a quiet stretch between runs is expected, not a symptom."
+
+	// onDemandGraceDefaultDesc is the sentence create_monitor's grace_s
+	// carries about the default createMonitor fills in.
+	onDemandGraceDefaultDesc = "Omit on an on_demand monitor and LastPing uses 300 seconds; on_demand has no cadence, so grace only sets the first-run deadline and the overrun fallback."
+
+	// traceContentDesc is shared by create_monitor and update_monitor: the
+	// default and who may change it must read the same in both.
+	traceContentDesc = "What this monitor's traces keep of prompt, command and tool content. 'dropped' (the default) removes it; 'redacted' keeps it, " +
+		"with every secret-shaped value redacted when it arrives. Only a person should choose 'redacted': never set it on your own initiative, only when " +
+		"the person you work for has asked for content to be stored."
 )
+
+// onDemandDefaultGraceS is the grace createMonitor sends for an on_demand
+// monitor created without one (see onDemandGraceDefaultDesc).
+const onDemandDefaultGraceS = 300
 
 func registerCheckTools(s *server.MCPServer) {
 	// create_monitor
@@ -318,13 +348,18 @@ func registerCheckTools(s *server.MCPServer) {
 				"Trimmed and lowercased automatically. Must match ^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$ (3-50 chars, lowercase alphanumeric and hyphens, "+
 				"starting and ending alphanumeric) after normalisation. UUID-shaped slugs are rejected — they would be ambiguous with a monitor id "+
 				"when importing into Terraform. Omit entirely for no slug.")),
-			mcp.WithString("monitor_type", mcp.Description("'heartbeat' (default), 'ci', or 'http'.")),
+			mcp.WithString("monitor_type", mcp.Description("'heartbeat' (default), 'ci', or 'http'. Any other value is refused with 400 UNKNOWN_MONITOR_TYPE. "+
+				"'ci' is a label, not a binding: a CI monitor is a heartbeat monitor with ci_provider set, so passing monitor_type='ci' WITHOUT ci_provider "+
+				"creates an ordinary heartbeat and its ci_workflow/ci_branch filters are refused.")),
 			mcp.WithString("schedule_kind", mcp.Description("'simple' (requires period_s), 'cron' (requires cron_expr), or 'on_demand' (requires neither). "+
-				"Required for heartbeat/ci monitors. "+onDemandTradeoffDesc)),
+				"Required for heartbeat/ci monitors. NOT ACCEPTED on monitor_type='http', together with period_s, cron_expr and tz: an http monitor's "+
+				"schedule is derived from probe_interval_s, so the API refuses all four with 400 FIELD_NOT_IN_SHAPE instead of accepting and ignoring them. "+
+				onDemandTradeoffDesc)),
 			mcp.WithNumber("period_s", mcp.Description("Ping interval in seconds. Required when schedule_kind='simple'.")),
 			mcp.WithString("cron_expr", mcp.Description("5-field cron expression, e.g. '0 3 * * *'. Required when schedule_kind='cron'.")),
 			mcp.WithString("tz", mcp.Description("IANA timezone for cron evaluation. Defaults to UTC.")),
-			mcp.WithNumber("grace_s", mcp.Description("Grace period in seconds after a ping is due before alerting.")),
+			mcp.WithNumber("grace_s", mcp.Description("Grace period in seconds after a ping is due before alerting. "+onDemandGraceDefaultDesc+
+				" On an upsert (existing slug), omitting it on an on_demand monitor sets 300: pass the current value to keep it.")),
 			mcp.WithNumber("failure_threshold", mcp.Description(failureThresholdDesc+
 				" On an upsert (existing slug), omitting this resets the monitor's threshold to 1 — pass the current value to keep it.")),
 			mcp.WithNumber("max_runtime_s", mcp.Description(maxRuntimeDesc+
@@ -355,6 +390,8 @@ func registerCheckTools(s *server.MCPServer) {
 			mcp.WithString("agent_id", mcp.Description(agentIDDesc+
 				" On an upsert (existing slug), omitting this leaves the monitor's current attachment (or lack of one) unchanged; supplying it re-applies the attachment, "+
 				"so an agent re-running its own registration converges to 'attached' every time rather than silently no-opping after the first call.")),
+			mcp.WithString("trace_content", mcp.Enum("dropped", "redacted"), mcp.Description(traceContentDesc+
+				" Omit on a create for dropped; on an upsert (existing slug), omitting it leaves the stored value unchanged.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -417,7 +454,8 @@ func registerCheckTools(s *server.MCPServer) {
 				"rebinding a monitor to a different CI system means deleting and recreating it."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),
 			mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable monitor name.")),
-			mcp.WithString("schedule_kind", mcp.Description("'simple', 'cron', or 'on_demand'. "+onDemandTradeoffDesc)),
+			mcp.WithString("schedule_kind", mcp.Description("'simple', 'cron', or 'on_demand'. NOT ACCEPTED on an http monitor, together with period_s, "+
+				"cron_expr and tz: its schedule is derived from probe_interval_s, so the API refuses all four with 400 FIELD_NOT_IN_SHAPE. "+onDemandTradeoffDesc)),
 			mcp.WithNumber("period_s", mcp.Description("Ping interval in seconds (for schedule_kind='simple').")),
 			mcp.WithString("cron_expr", mcp.Description("5-field cron expression (for schedule_kind='cron').")),
 			mcp.WithString("tz", mcp.Description("IANA timezone for cron evaluation.")),
@@ -455,6 +493,8 @@ func registerCheckTools(s *server.MCPServer) {
 			mcp.WithString("agent_id", mcp.Description(agentIDDesc+" Omit to leave the monitor's current attachment (or lack of one) unchanged.")),
 			mcp.WithString("assertions", mcp.Description(assertionsDesc)),
 			mcp.WithString("guards", mcp.Description(guardsDesc)),
+			mcp.WithString("trace_content", mcp.Enum("dropped", "redacted"), mcp.Description(traceContentDesc+
+				" Omit to leave the monitor's current value unchanged.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -597,6 +637,16 @@ func (c *APIClient) createMonitor(ctx context.Context, req mcp.CallToolRequest) 
 	}
 	if v, ok := args["grace_s"].(float64); ok && v > 0 {
 		body["grace_s"] = v
+	} else if body["schedule_kind"] == "on_demand" {
+		// Production, 2026-09-20: create_monitor with schedule_kind
+		// on_demand and no grace_s failed 400 "check: grace 0s outside
+		// [60, 31536000]", although grace_s is optional in this tool. An
+		// on_demand monitor has no cadence, so its grace only sets the
+		// first-run deadline and the overrun fallback, and asking an agent
+		// to pick a number it cannot reason about is how the tool got
+		// stuck. Scoped to on_demand, where the failure is: every other
+		// create keeps the API's own rule.
+		body["grace_s"] = onDemandDefaultGraceS
 	}
 	// POST /api/v1/checks is the slug-upsert path and has full-replace
 	// semantics: a field omitted here is reset to its default on an existing
@@ -667,6 +717,9 @@ func (c *APIClient) createMonitor(ctx context.Context, req mcp.CallToolRequest) 
 	if v, ok := args["agent_id"].(string); ok && v != "" {
 		body["agent_id"] = v
 	}
+	if v, ok := args["trace_content"].(string); ok && v != "" {
+		body["trace_content"] = v
+	}
 
 	data, _ := json.Marshal(body)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/api/v1/checks", bytes.NewReader(data))
@@ -707,7 +760,8 @@ func (c *APIClient) createMonitor(ctx context.Context, req mcp.CallToolRequest) 
 			"  provider:    %s\n"+
 			"  webhook URL: %s\n"+
 			"  secret:      %s\n"+
-			"If you lose it, no MCP tool can recover it: the secret must be regenerated from the dashboard or the REST API, "+
+			"If you lose it, no MCP tool can recover it: the secret must be regenerated from the dashboard, or through "+
+			"POST /api/v1/checks/{id}/ci/regenerate with an ADMIN-scoped API key (a write-scoped key is refused), "+
 			"and until it is, this monitor receives nothing from CI.", ch.CiProvider, ch.CiWebhookURL, ch.CiSecret)
 	}
 	return mcp.NewToolResultText(out), nil
@@ -951,6 +1005,9 @@ func (c *APIClient) updateMonitor(ctx context.Context, id string, req mcp.CallTo
 	}
 	if v, ok := args["agent_id"].(string); ok && v != "" {
 		body["agent_id"] = v
+	}
+	if v, ok := args["trace_content"].(string); ok && v != "" {
+		body["trace_content"] = v
 	}
 
 	// Assertions live behind their own replace-the-set PUT, so they cannot ride
