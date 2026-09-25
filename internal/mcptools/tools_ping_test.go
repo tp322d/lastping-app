@@ -71,12 +71,7 @@ const pingInstructionsJSON = `{
   "otel_resource_attributes": "lastping.monitor_id=abc-123",
   "otel_headers_hint": "Authorization=Bearer <your tracing key>",
   "otel_env_lines": ["export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=\"https://ping.lastping.dev/v1/traces\""],
-  "tracing_how_to": "To send OpenTelemetry traces, carry out the matching block of trace_setup...",
-  "trace_setup": [{"tool":"claude-code","title":"Claude Code","writes":"The env block","command":"","steps":["a && b"],
-    "files":[{"path":"~/.claude/lastping-tracing-key","language":"text","content":"<your tracing key>\n","mode":"600","merge":false}],
-    "env_lines":["export OTEL_EXPORTER_OTLP_PROTOCOL=\"http/protobuf\""],"verify":"Send one test span. It must print 202:",
-    "console_link":"https://app.lastping.dev/app/runs?monitor=abc-123","limits":"Reads telemetry settings only when a session starts.",
-    "secret_in_url":false}]
+  "tracing_how_to": "TRACING: send OpenTelemetry traces to the LastPing monitor... fetch its set-up block with get_trace_setup"
 }`
 
 // TestGetPingInstructions_ProxiesToTheRightEndpoint verifies the tool calls
@@ -184,7 +179,6 @@ func TestGetPingInstructions_IncludesEveryHowToField(t *testing.T) {
 		"otel_headers_hint",
 		"otel_env_lines",
 		"tracing_how_to",
-		"trace_setup",
 	} {
 		require.Contains(t, served, field, "fixture is missing %s; the assertion below would be vacuous", field)
 		assert.Equal(t, served[field], got[field],
@@ -277,8 +271,8 @@ const wantGetPingInstructionsDesc = "" +
 	"a one-time, unchangeable commitment that replaces the run grading itself. " +
 	"And `discovery_how_to`, which is about the OTHER jobs on this host or in this repo: how to find the scheduled work nobody is watching yet " +
 	"and propose it, rather than monitoring only the one thing you were asked about. " +
-	"To send OpenTelemetry traces, read `tracing_how_to` and carry out the matching block of `trace_setup` yourself (get_trace_setup " +
-	"returns the same steps tailored to one tool); the tracing key comes from create_ingest_key, never from your own API key. " +
+	"To send OpenTelemetry traces, read `tracing_how_to`, call get_trace_setup with the tool that sends the telemetry and carry " +
+	"its steps out yourself; the tracing key comes from create_ingest_key, never from your own API key. " +
 	"`otel_env_lines` is the minimal form: the `export` lines (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL, " +
 	"OTEL_RESOURCE_ATTRIBUTES, OTEL_EXPORTER_OTLP_HEADERS) to set in the child process's environment so its spans arrive on this " +
 	"monitor; fill in the tracing key placeholder yourself, it is not resolved server-side. An exporter that cannot set " +
@@ -342,4 +336,33 @@ func TestGetPingInstructions_NotFound(t *testing.T) {
 
 	result := callTool(t, s, c, "get_ping_instructions", map[string]interface{}{"id": "missing"})
 	assert.True(t, result.IsError, "expected error result for 404")
+}
+
+// TestGetPingInstructions_NeverRendersTraceSetupBlocks: the eight per-tool
+// set-up blocks are get_trace_setup's, not this tool's, so every
+// get_ping_instructions call stays small. Even a server that still serves
+// trace_setup does not get them through: the mirror struct does not name the
+// field. Positive companion: tracing_how_to, which points at
+// get_trace_setup, still arrives.
+func TestGetPingInstructions_NeverRendersTraceSetupBlocks(t *testing.T) {
+	older := strings.TrimSuffix(strings.TrimSpace(pingInstructionsJSON), "}") +
+		`, "trace_setup": [{"tool":"otel-sdk","title":"Any OpenTelemetry SDK","limits":"a block only get_trace_setup returns"}]}`
+	var probe map[string]any
+	require.NoError(t, json.Unmarshal([]byte(older), &probe), "the older-server fixture must be valid JSON")
+	require.Contains(t, probe, "trace_setup")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(older))
+	}))
+	defer srv.Close()
+
+	result := callTool(t, newTestServer(t, "https://ping.lastping.dev"), mcptools.NewAPIClient(srv.URL, "k"),
+		"get_ping_instructions", map[string]interface{}{"id": "abc-123"})
+	require.False(t, result.IsError)
+	text := resultText(t, result)
+	assert.NotContains(t, text, `"trace_setup":`)
+	assert.NotContains(t, text, "a block only get_trace_setup returns")
+	assert.Contains(t, text, `"tracing_how_to"`)
+	assert.Contains(t, text, "get_trace_setup")
 }

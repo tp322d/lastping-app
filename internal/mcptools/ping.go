@@ -53,8 +53,8 @@ func registerPingTools(s *server.MCPServer, pingHost string) {
 				"a one-time, unchangeable commitment that replaces the run grading itself. "+
 				"And `discovery_how_to`, which is about the OTHER jobs on this host or in this repo: how to find the scheduled work nobody is watching yet "+
 				"and propose it, rather than monitoring only the one thing you were asked about. "+
-				"To send OpenTelemetry traces, read `tracing_how_to` and carry out the matching block of `trace_setup` yourself (get_trace_setup "+
-				"returns the same steps tailored to one tool); the tracing key comes from create_ingest_key, never from your own API key. "+
+				"To send OpenTelemetry traces, read `tracing_how_to`, call get_trace_setup with the tool that sends the telemetry and carry "+
+				"its steps out yourself; the tracing key comes from create_ingest_key, never from your own API key. "+
 				"`otel_env_lines` is the minimal form: the `export` lines (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL, "+
 				"OTEL_RESOURCE_ATTRIBUTES, OTEL_EXPORTER_OTLP_HEADERS) to set in the child process's environment so its spans arrive on this "+
 				"monitor; fill in the tracing key placeholder yourself, it is not resolved server-side. An exporter that cannot set "+
@@ -174,11 +174,12 @@ type PingInstructions struct {
 	OtelResourceAttributes string   `json:"otel_resource_attributes"`
 	OtelHeadersHint        string   `json:"otel_headers_hint"`
 	OtelEnvLines           []string `json:"otel_env_lines"`
-	// TracingHowTo and TraceSetup mirror the API struct's fields of the same
-	// name, for the reason DiscoveryHowTo's comment gives: a proxy that
-	// decodes into this struct silently drops what it does not name.
-	TracingHowTo string            `json:"tracing_how_to"`
-	TraceSetup   []TraceSetupBlock `json:"trace_setup"`
+	// TracingHowTo mirrors the API struct's field of the same name, for the
+	// reason DiscoveryHowTo's comment gives: a proxy that decodes into this
+	// struct silently drops what it does not name. The per-tool set-up blocks
+	// are get_trace_setup's, not this tool's: carrying all eight here made
+	// every get_ping_instructions call pay for set-up it rarely needs.
+	TracingHowTo string `json:"tracing_how_to"`
 }
 
 // getPingInstructions proxies to GET /api/v1/checks/{id}/ping-instructions

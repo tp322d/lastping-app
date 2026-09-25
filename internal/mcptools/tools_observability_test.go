@@ -503,12 +503,23 @@ func TestGetAgent_DecodesUsageAndTopDependencies(t *testing.T) {
 		assert.Equal(t, want["top_dependencies"], got["top_dependencies"], "%s: top_dependencies round-trips whole", tc.tool)
 	}
 
-	// update_agent confirms a rename; the trace facts are not in its answer.
+	// update_agent confirms a rename; the trace facts are not in its answer,
+	// and what is (the name and slug, a trace source's service.name when the
+	// agent was adopted) comes back inside the untrusted-output envelope.
 	_, c := newStub(t, http.StatusOK, agent)
 	res := callTool(t, obsServer(t), c, "update_agent", map[string]interface{}{"id": "a1", "name": "Triage Bot"})
 	require.False(t, res.IsError, extractText(res))
 	assert.NotContains(t, extractText(res), "top_dependencies")
 	assert.Contains(t, extractText(res), "Triage Bot")
+	var env struct {
+		Notice          string                 `json:"notice"`
+		UntrustedFields []string               `json:"untrusted_fields"`
+		Data            map[string]interface{} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(extractText(res)), &env), "the whole answer must be the envelope: %s", extractText(res))
+	assert.NotEmpty(t, env.Notice)
+	assert.Subset(t, env.UntrustedFields, []string{"name", "slug"})
+	assert.NotContains(t, env.Data, "usage_24h")
 }
 
 // TestObservabilityWrappedToolsDescribeTheEnvelope: every newer tool that

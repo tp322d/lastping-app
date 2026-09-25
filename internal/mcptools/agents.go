@@ -334,13 +334,13 @@ func (c *APIClient) updateAgent(ctx context.Context, id string, req mcp.CallTool
 	if err := json.NewDecoder(resp.Body).Decode(&ag); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to decode response: %v", err)), nil
 	}
-	// update_agent confirms a rename; it is not a read. The two trace
-	// facts stay out of its plain-text answer, where they would be exporter
-	// text outside the untrusted-output envelope (get_agent carries them).
+	// update_agent confirms a rename; it is not a read, so the two trace
+	// facts stay out (get_agent carries them). What it does return goes in
+	// the untrusted-output envelope, like get_agent's: name and slug are a
+	// trace source's service.name verbatim when the agent was adopted from a
+	// discovered source, which is exporter text, not LastPing's.
 	ag.Usage24h, ag.TopDependencies = nil, nil
-
-	out, _ := json.MarshalIndent(ag, "", "  ")
-	return mcp.NewToolResultText(fmt.Sprintf("Agent updated:\n%s", out)), nil
+	return untrustedResult(ag, "name", "slug")
 }
 
 func (c *APIClient) deleteAgent(ctx context.Context, id string) (*mcp.CallToolResult, error) {
