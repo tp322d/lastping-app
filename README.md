@@ -90,19 +90,44 @@ authenticate a ping; the ping URL stays unauthenticated by design, as above.
 
 ## MCP server — let an agent set up its own monitoring
 
-```jsonc
-// claude_desktop_config.json, .mcp.json, or your client's equivalent
+Claude Desktop's config file runs local programs only, so LastPing connects
+through the mcp-remote bridge. Add this to `claude_desktop_config.json`
+(macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`):
+
+```json
 {
   "mcpServers": {
     "lastping": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "https://mcp.lastping.dev/mcp",
-               "--header", "Authorization: Bearer ${LASTPING_API_KEY}"],
-      "env": { "LASTPING_API_KEY": "lp__your_key_here" }
+      "command": "/ABSOLUTE/PATH/TO/npx",
+      "args": [
+        "-y", "mcp-remote",
+        "https://mcp.lastping.dev/mcp",
+        "--header", "Authorization:${LASTPING_AUTH}"
+      ],
+      "env": {
+        "PATH": "/FOLDER/THAT/HOLDS/npx:/usr/bin:/bin",
+        "LASTPING_AUTH": "Bearer lp_your_key"
+      }
     }
   }
 }
 ```
+
+- Needs Node.js. Claude Desktop does not read your shell's PATH, so give it
+  the full path: run `which npx` in a terminal and put the result in
+  `command` (with nvm it looks like
+  `/Users/you/.nvm/versions/node/v22.11.0/bin/npx`), and its folder at the
+  front of `PATH` in `env`.
+- Quit and reopen Claude Desktop; it reads the file only at start-up.
+  Settings, Connectors then lists lastping.
+- Adding LastPing as a custom connector (Settings, Connectors, Add custom
+  connector) needs a sign-in LastPing does not offer yet, so the bridge above
+  is the way for now. Cowork uses the same Desktop entry.
+
+Claude Code connects directly, no bridge:
+`claude mcp add --transport http --scope user lastping https://mcp.lastping.dev/mcp --header "Authorization: Bearer <key>"`.
+Cursor, Windsurf, Codex CLI, Gemini CLI and other clients:
+[lastping.dev/mcp/#connect](https://lastping.dev/mcp/#connect).
 
 The hosted server is the recommended path — nothing to install, and it always
 carries the current tool set.
