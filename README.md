@@ -129,8 +129,10 @@ Claude Code connects directly, no bridge:
 Cursor, Windsurf, Codex CLI, Gemini CLI and other clients:
 [lastping.dev/mcp/#connect](https://lastping.dev/mcp/#connect).
 
-The hosted server is the recommended path — nothing to install, and it always
-carries the current tool set.
+The hosted server is the recommended path, and it always carries the current
+tool set. Claude Code, Cursor, Windsurf, Codex CLI and Gemini CLI connect to it
+with a URL and an API key, with nothing to install. Claude Desktop needs one
+extra step: the mcp-remote bridge above, which needs Node.js.
 
 A stdio binary is also here if you would rather run it yourself:
 
