@@ -292,13 +292,13 @@ func TestGetAgentUsage_AgentOrFleet(t *testing.T) {
 	call := st.only(t)
 	assert.Equal(t, "/api/v1/agents/a1/usage", call.Path)
 	assert.Equal(t, "24h", call.Query.Get("range"))
-	assert.Equal(t, []string{"days.model", "days.provider"}, decodeObsEnvelope(t, extractText(res)).UntrustedFields)
+	assert.Equal(t, []string{"days.model", "days.provider", "by_project.project"}, decodeObsEnvelope(t, extractText(res)).UntrustedFields)
 
 	st.reset()
 	res = callTool(t, obsServer(t), c, "get_agent_usage", map[string]interface{}{})
 	require.False(t, res.IsError, extractText(res))
 	assert.Equal(t, "/api/v1/agents/usage", st.only(t).Path)
-	assert.Equal(t, []string{"days.model", "days.provider", "by_agent.name"}, decodeObsEnvelope(t, extractText(res)).UntrustedFields)
+	assert.Equal(t, []string{"days.model", "days.provider", "by_agent.name", "by_project.project"}, decodeObsEnvelope(t, extractText(res)).UntrustedFields)
 
 	d := paramDescription(t, "get_agent_usage", "id")
 	assert.Contains(t, d, "Omit for every agent")
@@ -436,7 +436,7 @@ func TestListRuns_CarriesTheTracedFilters(t *testing.T) {
 	}, call.Query, "has_error=false is a filter, not an omission")
 
 	env := decodeObsEnvelope(t, extractText(res))
-	assert.Equal(t, []string{"runs.title", "runs.rid", "runs.source_name", "runs.agent_name"}, env.UntrustedFields)
+	assert.Equal(t, []string{"runs.title", "runs.rid", "runs.source_name", "runs.agent_name", "runs.project", "runs.upstream_error"}, env.UntrustedFields)
 	var page struct {
 		Runs []struct {
 			Traced  bool   `json:"traced"`

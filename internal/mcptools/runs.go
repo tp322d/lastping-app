@@ -140,11 +140,20 @@ func registerListRunsTool(s *server.MCPServer) {
 			// title and rid are what the run's own ping chose (as in
 			// get_run_history); source_name is the exporter's service.name;
 			// agent_name can be that same service.name when the agent was
-			// created by adopting a discovered source. check_name is a
-			// monitor name a project member gave, and incident.cause and
-			// outcome are words the server picks.
+			// created by adopting a discovered source. project is the label
+			// the Claude Code hook sent on the run's start (?project=, the
+			// working directory's basename): whoever holds the ping URL
+			// chooses it, and its sanitising still lets a sentence through.
+			// check_name is a monitor name a project member gave, and
+			// incident.cause, outcome and failure_cause are words the server
+			// picks. upstream_error is one of three server words too
+			// (server_error, overloaded, rate_limit: the server reports the
+			// stored error type only when it is one of those, and an empty
+			// string otherwise); it stays listed because the value is copied
+			// from the hook's ?error_type=, so the list holds if that rule
+			// ever widens.
 			return c.proxyRead(ctx, "/api/v1/runs", q, "",
-				"runs.title", "runs.rid", "runs.source_name", "runs.agent_name")
+				"runs.title", "runs.rid", "runs.source_name", "runs.agent_name", "runs.project", "runs.upstream_error")
 		},
 	)
 }
@@ -211,10 +220,18 @@ func (c *APIClient) getRun(ctx context.Context, id, rid string) (*mcp.CallToolRe
 	// /api/v1/agents/discovered/{id}/adopt), so an agent's name can be the
 	// exporter's string verbatim.
 	//
+	// project is the Claude Code hook's label for the run's start
+	// (?project=), chosen by whoever holds the ping URL, the same authorship
+	// as title and rid. upstream_error is one of three server words
+	// (server_error, overloaded, rate_limit: the server reports the fail
+	// ping's error type only when it is one of those), copied from the
+	// hook's ?error_type=, so it stays listed in case that rule ever widens;
+	// failure_cause is a server word.
+	//
 	// This list is byte-for-byte the hosted server's, and must stay that way.
 	return untrustedResult(detail, "title", "output_excerpt", "rid",
 		"events.body", "events.label", "steps.name", "assertions.failure",
 		"spans.name", "spans.status_message", "spans.attributes",
 		"spans.gen_ai.model", "spans.gen_ai.system",
-		"source_name", "spans.source_name", "spans.peer_name", "agent_name")
+		"source_name", "spans.source_name", "spans.peer_name", "agent_name", "project", "upstream_error")
 }

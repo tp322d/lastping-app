@@ -142,13 +142,17 @@ func registerObservabilityTools(s *server.MCPServer) {
 			q := url.Values{}
 			setIf(q, "range", req.GetString("range", ""))
 			id := req.GetString("id", "")
+			// by_project.project is the Claude Code hook's ?project= label,
+			// chosen by whoever holds a ping URL (the same authorship as
+			// list_runs' runs.project). The top-level project only echoes
+			// the caller's own filter.
 			if id == "" {
 				return c.proxyRead(ctx, "/api/v1/agents/usage", q, "",
-					"days.model", "days.provider", "by_agent.name")
+					"days.model", "days.provider", "by_agent.name", "by_project.project")
 			}
 			return c.proxyRead(ctx, "/api/v1/agents/"+url.PathEscape(id)+"/usage", q,
 				fmt.Sprintf("Agent not found: id=%s. Use list_agents to find valid IDs or slugs.", id),
-				"days.model", "days.provider")
+				"days.model", "days.provider", "by_project.project")
 		},
 	)
 
