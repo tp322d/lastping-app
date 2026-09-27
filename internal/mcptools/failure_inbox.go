@@ -69,9 +69,14 @@ const listOpenIncidentsDesc = "Read this agent's failure inbox: every incident c
 	"- exit_code — the status the run exited with. 137 (SIGKILL, usually the OOM killer) and 1 are both the word 'fail' and are " +
 	"completely different problems.\n" +
 	"- duration_vs_normal — a COMPARISON, not a measurement: '8.2x the typical run (41m vs 5m), from 30 archived days'. run_ms, " +
-	"typical_ms, ratio and days_sampled are carried too, so you can apply your own threshold and tell a 30-day norm from a 2-day one.\n" +
+	"typical_ms, ratio and days_sampled are carried too, so you can apply your own threshold and tell a 30-day norm from a 2-day one. " +
+	"On a young monitor with no archived day yet, the norm is the median of its recent measured runs (at least 5 in the last 30 days): " +
+	"days_sampled is then 0 and summary names the run count ('from 12 runs in the last 30 days'), so read 0 there as recent runs, " +
+	"not as no evidence.\n" +
 	"- cause — 'silence' and 'fail' demand opposite responses. 'fail' means the job ran and reported an error; 'silence' means it " +
-	"never reported at all, which usually implicates the scheduler or the host rather than the job.\n" +
+	"never reported at all, which usually implicates the scheduler or the host rather than the job. 'upstream' means runs in a " +
+	"row (3, or the monitor's failure_threshold when higher) ended on the model provider's API error (server_error, overloaded, " +
+	"rate_limit), not on the agent's work; detail names the last error type.\n" +
 	"- body_excerpt (the error text the failing run actually printed), run_id (line the incident up against your own logs), and " +
 	"ci.run_url (where the full log is, when the failure came from a CI provider).\n" +
 	"ABSENCE MEANS NO EVIDENCE — NEVER GOOD NEWS. Every enrichment degrades to ABSENT rather than erroring, so a missing field is " +

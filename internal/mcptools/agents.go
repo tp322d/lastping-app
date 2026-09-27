@@ -225,7 +225,7 @@ func (c *APIClient) registerAgent(ctx context.Context, name, description string)
 			"Naming an agent that does not exist is an error, never an implicit create, so keep this agent_id for every monitor this agent owns. "+
 			"Once the monitor exists, call get_ping_instructions with its id and read its reporting_options field to choose how this agent should report: "+
 			"how_to, the manual protocol, is the UNIVERSAL default — it works in any agent, any language, any tool, with no prerequisite, so set "+
-			"expect_every_s (the silence floor, set via update_monitor) alongside it and a lapse opens a detected incident instead of the monitor reading healthy forever. "+
+			"expect_every_s (the silence floor) alongside it and a lapse opens a detected incident instead of the monitor reading healthy forever. "+
 			"If this agent IS Claude Code specifically, hook_install is available as an optional shortcut that automates the exact same protocol via "+
 			"Claude Code's own hooks and can additionally send blocked/note; a different agent, even one with its own hook system, must NOT translate "+
 			"hook_install's steps — they are Claude Code specific and a translated install verifies clean while never reporting, so use how_to instead.",

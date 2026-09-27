@@ -86,7 +86,7 @@ func registerTemplateTools(s *server.MCPServer) {
 			mcp.WithString("event_type", mcp.Required(), mcp.Description(
 				"Event type: "+eventTypeList()+".")),
 			mcp.WithString("cause", mcp.Description(
-				"Optional cause for a per-cause override (e.g. 'silence', 'overrun', 'never_started', 'stalled', 'runaway'). "+
+				"Optional cause for a per-cause override (e.g. 'silence', 'overrun', 'never_started', 'stalled', 'runaway', 'upstream'). "+
 					"Omit or leave empty for an event-type-wide template.")),
 			mcp.WithString("template", mcp.Required(), mcp.Description(
 				"Template text with {variable} placeholders. Empty string resets to the built-in default.")),

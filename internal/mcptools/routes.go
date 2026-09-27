@@ -33,7 +33,9 @@ func registerRouteTools(s *server.MCPServer) {
 			mcp.WithString("event_type", mcp.Required(), mcp.Description("One of eight: down (alert opened), recovery (alert cleared), "+
 				"fail (explicit failure ping), every-run (one notification per completed run, success or failure), "+
 				"success (fires only when a run completes successfully), started (fires when a run begins), "+
-				"blocked (an agent reported it is waiting on a human — fires immediately, the moment the ping arrives; "+
+				"blocked (an agent reported it is waiting on a human; held 10 minutes and sent only if that run is still blocked then, "+
+				"at most once per blocked stretch of a run: a note, step, success, fail or cancel for the same run inside the 10 minutes cancels it, a title does not; "+
+				"a blocked ping sent without a run id belongs to no run, so any non-blocked ping on the monitor ends its stretch: a start, log, note, success, fail or cancel of any run, or a step of the monitor's current run (any step when no run is current); "+
 				"this is separate from the 'blocked' INCIDENT that opens later only if the wait outlives blocked_timeout_s, "+
 				"see create_monitor/update_monitor), note (a free-form annotation ping — never itself opens or clears an incident). "+
 				"Prefer down/recovery/fail: they fire only on a state change. every-run, success, started, and note are not "+

@@ -85,8 +85,13 @@ func registerListRunsTool(s *server.MCPServer) {
 			mcp.WithDescription("List runs across every monitor in the project, newest started first, including runs that exist only "+
 				"as OpenTelemetry traces (traced: true), which get_run_history cannot list. Each run carries check_id, check_name, "+
 				"rid, title, outcome, started_at, ended_at, duration_ms, step_count, exit_code, its incident when one opened, "+
-				"span_count, tokens and estimated cost_usd when it was traced, and agent_id, agent_name, source_name (the trace "+
-				"source) and multi_trace (true when the run holds more than one trace). outcome is succeeded, failed, cancelled, "+
+				"span_count, tokens, cost_usd and cost_source (client, estimated or mixed, as get_agent_usage reads them) when it "+
+				"was traced, and agent_id, agent_name, source_name (the trace "+
+				"source), multi_trace (true when the run holds more than one trace), and failure_cause with upstream_error: "+
+				"failure_cause is 'upstream' when the run ended on the model provider's API error, which pages only after 3 runs in a "+
+				"row (or the monitor's failure_threshold when higher), and upstream_error then names it (server_error, overloaded or "+
+				"rate_limit); both are empty otherwise. "+
+				"outcome is succeeded, failed, cancelled, "+
 				"blocked, running or unfinished: unfinished is a run that started and never ended within its monitor's "+
 				"max_runtime_s (24 hours when unset); it is not a failure and never pages. The filters combine, and they narrow "+
 				"counts (the window's total per outcome) too. Page with next_cursor. Call get_run with check_id and rid for one "+
@@ -104,7 +109,7 @@ func registerListRunsTool(s *server.MCPServer) {
 			mcp.WithString("model", mcp.Description("Only runs that called this model, by exact model id.")),
 			mcp.WithBoolean("has_error", mcp.Description("true: only runs with a span that reported an error. false: only runs without one.")),
 			mcp.WithNumber("min_duration_ms", mcp.Description("Only runs that took at least this many milliseconds.")),
-			mcp.WithString("min_cost_usd", mcp.Description("Only runs whose estimated cost is at least this many US dollars, as a decimal "+
+			mcp.WithString("min_cost_usd", mcp.Description("Only runs whose cost is at least this many US dollars, as a decimal "+
 				"string, e.g. \"0.25\".")),
 			mcp.WithString("trace_id", mcp.Description("Only the run a trace became: 8 to 32 hex digits of its trace id. Finds runs made "+
 				"from a trace with no run id, not runs that named their own.")),
