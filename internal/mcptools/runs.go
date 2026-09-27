@@ -146,9 +146,12 @@ func registerListRunsTool(s *server.MCPServer) {
 			// chooses it, and its sanitising still lets a sentence through.
 			// check_name is a monitor name a project member gave, and
 			// incident.cause, outcome and failure_cause are words the server
-			// picks. upstream_error is the hook's ?error_type=, chosen by
-			// whoever holds the ping URL: [a-z_] only, but 40 of those still
-			// spell a sentence.
+			// picks. upstream_error is one of three server words too
+			// (server_error, overloaded, rate_limit: the server reports the
+			// stored error type only when it is one of those, and an empty
+			// string otherwise); it stays listed because the value is copied
+			// from the hook's ?error_type=, so the list holds if that rule
+			// ever widens.
 			return c.proxyRead(ctx, "/api/v1/runs", q, "",
 				"runs.title", "runs.rid", "runs.source_name", "runs.agent_name", "runs.project", "runs.upstream_error")
 		},
@@ -219,8 +222,11 @@ func (c *APIClient) getRun(ctx context.Context, id, rid string) (*mcp.CallToolRe
 	//
 	// project is the Claude Code hook's label for the run's start
 	// (?project=), chosen by whoever holds the ping URL, the same authorship
-	// as title and rid. upstream_error is the hook's ?error_type= on the
-	// run's fail, the same authorship; failure_cause is a server word.
+	// as title and rid. upstream_error is one of three server words
+	// (server_error, overloaded, rate_limit: the server reports the fail
+	// ping's error type only when it is one of those), copied from the
+	// hook's ?error_type=, so it stays listed in case that rule ever widens;
+	// failure_cause is a server word.
 	//
 	// This list is byte-for-byte the hosted server's, and must stay that way.
 	return untrustedResult(detail, "title", "output_excerpt", "rid",
