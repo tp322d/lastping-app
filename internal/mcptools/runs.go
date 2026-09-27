@@ -29,7 +29,11 @@ func registerRunTools(s *server.MCPServer) {
 				"cancel, incident_opened) in time order, its declared assertions with pass/fail/not_evaluated "+
 				"verdicts against the terminal ping body, the terminal output excerpt, CI provider metadata "+
 				"when this run carried it, and its OTLP spans (spans[], tree order: parents before children, "+
-				"siblings by start time) when the run was traced. Use it after get_run_history or "+
+				"siblings by start time) when the run was traced. A Claude Code turn whose hook is current is ONE run holding its "+
+				"trace: the hook's start, steps and end with the turn's spans, tokens and cost. The run also carries project (the "+
+				"folder the Claude Code session worked in, empty when none), receiving_spans (spans reached it in the last two "+
+				"minutes), in_hook_session (a run the agent reported itself inside an open hook turn of the same monitor), "+
+				"is_test (the set-up's test span), failure_cause and upstream_error (see list_runs). Use it after get_run_history or "+
 				"list_open_incidents points at a specific run (id + rid) and you need the blow-by-blow rather "+
 				"than the summary row. outcome is one of succeeded, failed, cancelled, blocked, running or unfinished: unfinished is a run "+
 				"with no end ping, no incident and not blocked whose start is older than the monitor's max_runtime_s (24 hours when unset); it "+
@@ -67,7 +71,7 @@ var runOutcomes = []string{"succeeded", "failed", "cancelled", "blocked", "runni
 
 // listRunsTextParams are list_runs' string filters, forwarded under the
 // query name the API gives them (GET /api/v1/runs).
-var listRunsTextParams = []string{"monitor", "outcome", "since", "until", "agent", "dependency", "operation", "model",
+var listRunsTextParams = []string{"monitor", "outcome", "since", "until", "project", "agent", "dependency", "operation", "model",
 	"min_cost_usd", "trace_id", "q", "cursor"}
 
 // registerListRunsTool registers list_runs, the proxy for GET /api/v1/runs:
@@ -87,10 +91,13 @@ func registerListRunsTool(s *server.MCPServer) {
 				"rid, title, outcome, started_at, ended_at, duration_ms, step_count, exit_code, its incident when one opened, "+
 				"span_count, tokens, cost_usd and cost_source (client, estimated or mixed, as get_agent_usage reads them) when it "+
 				"was traced, and agent_id, agent_name, source_name (the trace "+
-				"source), multi_trace (true when the run holds more than one trace), and failure_cause with upstream_error: "+
+				"source), multi_trace (true when the run holds more than one trace), project (the folder the Claude Code session "+
+				"worked in, empty when none), receiving_spans (spans reached the run in the last two minutes), in_hook_session "+
+				"(a run the agent reported itself inside an open hook turn of the same monitor; still counted), is_test (the "+
+				"set-up's test span, in no count), and failure_cause with upstream_error: "+
 				"failure_cause is 'upstream' when the run ended on the model provider's API error, which pages only after 3 runs in a "+
 				"row (or the monitor's failure_threshold when higher), and upstream_error then names it (server_error, overloaded or "+
-				"rate_limit); both are empty otherwise. "+
+				"rate_limit); both are empty otherwise. A Claude Code turn whose hook is current is ONE run holding its trace. "+
 				"outcome is succeeded, failed, cancelled, "+
 				"blocked, running or unfinished: unfinished is a run that started and never ended within its monitor's "+
 				"max_runtime_s (24 hours when unset); it is not a failure and never pages. The filters combine, and they narrow "+
@@ -101,6 +108,7 @@ func registerListRunsTool(s *server.MCPServer) {
 			mcp.WithString("outcome", mcp.Enum(runOutcomes...), mcp.Description("Only runs with this outcome.")),
 			mcp.WithString("since", mcp.Description("RFC 3339 start of the window, e.g. 2026-09-01T00:00:00Z. Default 7 days ago; at most 90 days back.")),
 			mcp.WithString("until", mcp.Description("RFC 3339 end of the window. Default now.")),
+			mcp.WithString("project", mcp.Description("Only runs whose Claude Code hook start carried this project label: the name of the folder the session worked in.")),
 			mcp.WithBoolean("traced", mcp.Description("true: only runs that hold spans. Omit or false for every run.")),
 			mcp.WithString("agent", mcp.Description("Only runs of this agent (agent UUID or slug).")),
 			mcp.WithString("dependency", mcp.Description("Only runs that called this dependency, by its exact name as get_agent_dependencies "+

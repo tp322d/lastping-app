@@ -576,7 +576,8 @@ func registerCheckTools(s *server.MCPServer) {
 	// snooze_monitor
 	s.AddTool(
 		newTool("snooze_monitor",
-			mcp.WithDescription("Set or clear a maintenance window on a monitor. During the window the monitor will not alert. "+
+			mcp.WithDescription("Set or clear a maintenance window on a monitor. The window holds deadline incidents (a missed, late or never-started run, an overrun, a stall, and a blocked run outliving blocked_timeout_s) and, on an HTTP monitor, failing probes: those are recorded but open no incident, and a site still failing when the window ends opens one on its next failure. "+
+				"Everything the job reports itself still notifies: its own fail ping, the page a blocked ping queues, a runaway ping rate, and any routed note, started, success or every-run event. "+
 				"Provide exactly one of: duration (e.g. '1h', '24h'), until (RFC 3339 timestamp), or clear=true to remove the window."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),
 			mcp.WithString("duration", mcp.Description("Go duration string, e.g. '1h' or '24h'. Use this OR until OR clear.")),

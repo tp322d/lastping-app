@@ -131,10 +131,19 @@ func registerObservabilityTools(s *server.MCPServer) {
 				"client when the tool reported its own cost, estimated when LastPing priced the tokens at API list prices, mixed "+
 				"when a traced day holds both, empty when unknown. origin is "+
 				"traces or metrics; a day and model can have one of each, and the two are never summed. With id, one agent's usage; "+
-				"without id, the whole project's, traces only, plus by_agent (each agent's totals, costliest first). "+
+				"without id, the whole project's, traces only, plus by_agent (each agent's totals, costliest first). Both carry "+
+				"by_project: per project (the folder a Claude Code session worked in) its runs, tokens and cost, from traced "+
+				"runs only (project_scope traces_only), costliest first. by_project need not sum to or match days: it sums each "+
+				"run's traced totals (every span's tokens; the traces' cost, estimated at list prices or the client's per-call cost "+
+				"where attached, as its cost_source says), while days, for one agent, prefer a Claude Code metrics export's "+
+				"reported cost for a day and model. With project, days become one row per UTC day with model and provider empty "+
+				"(a run's totals are not split by model); project narrows days and by_project, not by_agent. "+
 				envelopeSentence),
 			mcp.WithString("id", mcp.Description("Agent UUID or slug (from list_agents). Omit for every agent in the project.")),
 			mcp.WithString("range", mcp.Enum(dependencyRanges...), mcp.Description(rangeParamDesc)),
+			mcp.WithString("project", mcp.Description("Only usage from traced runs of this project; metrics-only usage has no project and is left out. "+
+				"days then hold one row per UTC day with model and provider empty (a run's totals are not split by model); "+
+				"by_agent is not narrowed.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -143,6 +152,7 @@ func registerObservabilityTools(s *server.MCPServer) {
 			}
 			q := url.Values{}
 			setIf(q, "range", req.GetString("range", ""))
+			setIf(q, "project", req.GetString("project", ""))
 			id := req.GetString("id", "")
 			if id == "" {
 				return c.proxyRead(ctx, "/api/v1/agents/usage", q, "",
