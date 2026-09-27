@@ -436,7 +436,7 @@ func TestListRuns_CarriesTheTracedFilters(t *testing.T) {
 	}, call.Query, "has_error=false is a filter, not an omission")
 
 	env := decodeObsEnvelope(t, extractText(res))
-	assert.Equal(t, []string{"runs.title", "runs.rid", "runs.source_name", "runs.agent_name"}, env.UntrustedFields)
+	assert.Equal(t, []string{"runs.title", "runs.rid", "runs.source_name", "runs.agent_name", "runs.project", "runs.upstream_error"}, env.UntrustedFields)
 	var page struct {
 		Runs []struct {
 			Traced  bool   `json:"traced"`

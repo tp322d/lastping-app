@@ -60,7 +60,7 @@ func TestGetRun(t *testing.T) {
 		"events.body", "events.label", "steps.name", "assertions.failure",
 		"spans.name", "spans.status_message", "spans.attributes",
 		"spans.gen_ai.model", "spans.gen_ai.system",
-		"source_name", "spans.source_name", "spans.peer_name", "agent_name"}, env.UntrustedFields)
+		"source_name", "spans.source_name", "spans.peer_name", "agent_name", "project", "upstream_error"}, env.UntrustedFields)
 
 	var got map[string]interface{}
 	require.NoError(t, json.Unmarshal(env.Data, &got))

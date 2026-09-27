@@ -140,11 +140,17 @@ func registerListRunsTool(s *server.MCPServer) {
 			// title and rid are what the run's own ping chose (as in
 			// get_run_history); source_name is the exporter's service.name;
 			// agent_name can be that same service.name when the agent was
-			// created by adopting a discovered source. check_name is a
-			// monitor name a project member gave, and incident.cause and
-			// outcome are words the server picks.
+			// created by adopting a discovered source. project is the label
+			// the Claude Code hook sent on the run's start (?project=, the
+			// working directory's basename): whoever holds the ping URL
+			// chooses it, and its sanitising still lets a sentence through.
+			// check_name is a monitor name a project member gave, and
+			// incident.cause, outcome and failure_cause are words the server
+			// picks. upstream_error is the hook's ?error_type=, chosen by
+			// whoever holds the ping URL: [a-z_] only, but 40 of those still
+			// spell a sentence.
 			return c.proxyRead(ctx, "/api/v1/runs", q, "",
-				"runs.title", "runs.rid", "runs.source_name", "runs.agent_name")
+				"runs.title", "runs.rid", "runs.source_name", "runs.agent_name", "runs.project", "runs.upstream_error")
 		},
 	)
 }
@@ -211,10 +217,15 @@ func (c *APIClient) getRun(ctx context.Context, id, rid string) (*mcp.CallToolRe
 	// /api/v1/agents/discovered/{id}/adopt), so an agent's name can be the
 	// exporter's string verbatim.
 	//
+	// project is the Claude Code hook's label for the run's start
+	// (?project=), chosen by whoever holds the ping URL, the same authorship
+	// as title and rid. upstream_error is the hook's ?error_type= on the
+	// run's fail, the same authorship; failure_cause is a server word.
+	//
 	// This list is byte-for-byte the hosted server's, and must stay that way.
 	return untrustedResult(detail, "title", "output_excerpt", "rid",
 		"events.body", "events.label", "steps.name", "assertions.failure",
 		"spans.name", "spans.status_message", "spans.attributes",
 		"spans.gen_ai.model", "spans.gen_ai.system",
-		"source_name", "spans.source_name", "spans.peer_name", "agent_name")
+		"source_name", "spans.source_name", "spans.peer_name", "agent_name", "project", "upstream_error")
 }
