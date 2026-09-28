@@ -29,8 +29,9 @@ func registerRunTools(s *server.MCPServer) {
 				"cancel, incident_opened) in time order, its declared assertions with pass/fail/not_evaluated "+
 				"verdicts against the terminal ping body, the terminal output excerpt, CI provider metadata "+
 				"when this run carried it, and its OTLP spans (spans[], tree order: parents before children, "+
-				"siblings by start time) when the run was traced. A Claude Code turn whose hook is current is ONE run holding its "+
-				"trace: the hook's start, steps and end with the turn's spans, tokens and cost. The run also carries project (the "+
+				"siblings by start time) when the run was traced. A Claude Code run whose hook is current holds its "+
+				"turns' traces: the hook's start, steps and end with each turn's spans, tokens and cost. A prompt after an "+
+				"interrupt, or one answering a blocked turn, continues the open run, and that turn's trace normally joins it. The run also carries project (the "+
 				"folder the Claude Code session worked in, empty when none), receiving_spans (spans reached it in the last two "+
 				"minutes), in_hook_session (a run the agent reported itself inside an open hook turn of the same monitor), "+
 				"is_test (the set-up's test span), failure_cause and upstream_error (see list_runs). Use it after get_run_history or "+
@@ -97,7 +98,8 @@ func registerListRunsTool(s *server.MCPServer) {
 				"set-up's test span, in no count), and failure_cause with upstream_error: "+
 				"failure_cause is 'upstream' when the run ended on the model provider's API error, which pages only after 3 runs in a "+
 				"row (or the monitor's failure_threshold when higher), and upstream_error then names it (server_error, overloaded or "+
-				"rate_limit); both are empty otherwise. A Claude Code turn whose hook is current is ONE run holding its trace. "+
+				"rate_limit); both are empty otherwise. A Claude Code run whose hook is current holds its turns' traces (a prompt after "+
+				"an interrupt, or one answering a blocked turn, continues the open run, and that turn's trace normally joins it). "+
 				"outcome is succeeded, failed, cancelled, "+
 				"blocked, running or unfinished: unfinished is a run that started and never ended within its monitor's "+
 				"max_runtime_s (24 hours when unset); it is not a failure and never pages. The filters combine, and they narrow "+

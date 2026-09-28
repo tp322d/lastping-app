@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -41,8 +42,10 @@ func registerPingTools(s *server.MCPServer, pingHost string) {
 				"property of your event loop instead of something you must remember — and it is the only mechanism that can send every state this product "+
 				"models, including blocked and note. Re-running hook_install replaces an older ~/.claude/lastping-report.sh (keeping a .bak), which is how an "+
 				"existing install is upgraded. hook_install is Claude Code specific: if you are a DIFFERENT AI agent — even one with its own hook or "+
-				"event system, Cursor, Windsurf, Codex, a custom framework — do NOT translate its steps into your own hooks; the event semantics differ and a "+
+				"event system, Cursor, Windsurf, a custom framework — do NOT translate its steps into your own hooks; the event semantics differ and a "+
 				"translated install can pass its own verification while never reporting, so use `how_to` instead. "+
+				"If you ARE Codex, pass tool \"codex\": `hook_install` is then Codex's own install (a script and two hooks in ~/.codex/hooks.json, "+
+				"trusted by the person in /hooks), and `how_to` says what Codex's sandbox does to pings you send yourself. "+
 				"If what you are monitoring is launched as a command instead — a cron job, a CI step, a script, or an agent started from a shell — use "+
 				"`run_wrapper`: wrap the command with `lastping run` and a separate process reports for you, so nothing has to be remembered; the tradeoff is "+
 				"that it reports the process's own lifecycle (start, success, fail, cancel) and has no way to send blocked or note. "+
@@ -54,13 +57,18 @@ func registerPingTools(s *server.MCPServer, pingHost string) {
 				"And `discovery_how_to`, which is about the OTHER jobs on this host or in this repo: how to find the scheduled work nobody is watching yet "+
 				"and propose it, rather than monitoring only the one thing you were asked about. "+
 				"To send OpenTelemetry traces, read `tracing_how_to`, call get_trace_setup with the tool that sends the telemetry and carry "+
-				"its steps out yourself; the tracing key comes from create_ingest_key, never from your own API key. "+
+				"its steps out yourself, except the tracing key: the person creates it on the monitor's Connect page and stores it from "+
+				"their own terminal, so you never create, ask for or hold it, and never use your own API key instead. "+
 				"`otel_env_lines` is the minimal form: the `export` lines (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL, "+
 				"OTEL_RESOURCE_ATTRIBUTES, OTEL_EXPORTER_OTLP_HEADERS) to set in the child process's environment so its spans arrive on this "+
-				"monitor; fill in the tracing key placeholder yourself, it is not resolved server-side. An exporter that cannot set "+
+				"monitor; the person puts the tracing key in place of its placeholder, in their own terminal or file, never you (it is not "+
+				"resolved server-side). An exporter that cannot set "+
 				"headers can instead POST straight to `<ping_url>/v1/traces`: the monitor-URL form needs no Authorization header at all, since the monitor "+
 				"id in the URL is itself the capability."),
-			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID (from create_monitor or list_monitors)."))),
+			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID (from create_monitor or list_monitors).")),
+			mcp.WithString("tool",
+				mcp.Enum("claude-code", "codex"),
+				mcp.Description("Which tool's install `hook_install` carries: claude-code (the default) or codex. Everything else in the result is the same."))),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
 			if err != nil {
@@ -70,7 +78,7 @@ func registerPingTools(s *server.MCPServer, pingHost string) {
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			return c.getPingInstructions(ctx, id, pingHost)
+			return c.getPingInstructions(ctx, id, req.GetString("tool", ""), pingHost)
 		},
 	)
 }
@@ -187,8 +195,12 @@ type PingInstructions struct {
 // the API is the only place run_wrapper/hook_install/how_to are assembled,
 // which is what lets this package stay free of the private prompt-building
 // package that produces them.
-func (c *APIClient) getPingInstructions(ctx context.Context, id, pingHost string) (*mcp.CallToolResult, error) {
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/api/v1/checks/"+id+"/ping-instructions", nil)
+func (c *APIClient) getPingInstructions(ctx context.Context, id, tool, pingHost string) (*mcp.CallToolResult, error) {
+	target := c.BaseURL + "/api/v1/checks/" + id + "/ping-instructions"
+	if tool != "" {
+		target += "?hook_tool=" + url.QueryEscape(tool)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to build request: %v", err)), nil
 	}

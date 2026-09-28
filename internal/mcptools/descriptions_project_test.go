@@ -39,8 +39,8 @@ func TestGetAgentUsage_ForwardsProject(t *testing.T) {
 }
 
 // TestRunDescriptions_NameTheRunFields: get_run and list_runs tell an agent
-// about the fields a run now carries, and that a hooked Claude Code turn is
-// one run.
+// about the fields a run now carries, and that a hooked Claude Code run holds
+// its turns' traces.
 func TestRunDescriptions_NameTheRunFields(t *testing.T) {
 	for _, tool := range []string{"get_run", "list_runs"} {
 		desc := toolDescription(t, tool)
@@ -49,7 +49,8 @@ func TestRunDescriptions_NameTheRunFields(t *testing.T) {
 			"receiving_spans (spans reached",
 			"in_hook_session (a run the agent reported itself inside an open hook turn",
 			"is_test (the set-up's test span",
-			"A Claude Code turn whose hook is current is ONE run holding its",
+			"A Claude Code run whose hook is current holds its",
+			"continues the open run, and that turn's trace normally joins it",
 		} {
 			assert.Contains(t, desc, want, tool)
 		}
@@ -106,8 +107,9 @@ func TestOpenIncidents_DescribesTheYoungMonitorNorm(t *testing.T) {
 // notify. The old "will not alert" claim is gone.
 func TestSnooze_SaysWhatTheWindowHoldsAndWhatStillNotifies(t *testing.T) {
 	desc := toolDescription(t, "snooze_monitor")
-	assert.Contains(t, desc, "The window holds deadline incidents (a missed, late or never-started run, an overrun, a stall, and a blocked run outliving blocked_timeout_s)")
+	assert.Contains(t, desc, "The window holds deadline incidents (a missed or never-started run, an overrun, a stall, and a blocked run outliving blocked_timeout_s)")
 	assert.Contains(t, desc, "on an HTTP monitor, failing probes")
+	assert.Contains(t, desc, "on an HTTP monitor, any fail is treated as a probe's")
 	assert.Contains(t, desc, "Everything the job reports itself still notifies: its own fail ping, the page a blocked ping queues, a runaway ping rate")
 	assert.NotContains(t, desc, "will not alert")
 }

@@ -24,7 +24,11 @@ const traceSetupJSON = `{"tool":"claude-code","prompt":"TRACING: send Claude Cod
 	`{"path":"~/.claude/settings.json","language":"json","content":"{}\n","mode":"","merge":true}],` +
 	`"env_lines":["export OTEL_EXPORTER_OTLP_PROTOCOL=\"http/protobuf\""],"verify":"Send one test span. It must print 202:",` +
 	`"console_link":"https://app.lastping.dev/app/runs?monitor=abc-123","limits":"Claude Code reads telemetry settings only when a session starts.",` +
-	`"secret_in_url":false}]}`
+	`"secret_in_url":false,"bang_command":"sh ~/.lastping/setup-claude-code.sh",` +
+	`"bang_script":{"path":"~/.lastping/setup-claude-code.sh","language":"sh","content":"#!/bin/sh\n","mode":"700","merge":false},` +
+	`"key_line":"(umask 077; IFS= read -rs k && echo saved)"},` +
+	`{"tool":"gemini","title":"Gemini CLI","writes":"","command":"","steps":[],"files":[],"env_lines":[],"verify":"","console_link":"",` +
+	`"limits":"","secret_in_url":false,"bang_command":"","bang_script":null,"key_line":""}]}`
 
 // TestGetTraceSetup_ProxiesTheRouteAndDropsNothing. The tool calls exactly
 // GET /api/v1/checks/{id}/trace-setup?tool=, and every field of the response
@@ -222,6 +226,25 @@ func TestTraceSetupTools_DescribeTheCredentialRules(t *testing.T) {
 		"Never use your own LastPing API key"} {
 		require.Contains(t, cik, want)
 	}
+	// The agent never holds the tracing key; the person stores it from their
+	// own terminal with the block's key line.
+	for _, want := range []string{"You never create, ask for or hold the tracing key", "key_line", "never enters the chat", "bang_script", "bang_command",
+		"For Claude Code and Codex", "Never open, read or merge ~/.codex/config.toml yourself"} {
+		require.Contains(t, gts, want)
+	}
+	require.NotContains(t, gts, "get the key with create_ingest_key")
+	require.Contains(t, gts, "removes the LastPing reporting block from CLAUDE.md, with backups")
+	// No description sends an agent to mint the key a person's own machine
+	// traces with.
+	require.NotContains(t, cik, "This is the credential get_trace_setup's steps need")
+	require.Contains(t, cik, "not for a person's own machine")
+	pi := tools["get_ping_instructions"].Tool.Description
+	require.NotContains(t, pi, "the tracing key comes from create_ingest_key")
+	require.NotContains(t, pi, "fill in the tracing key placeholder yourself")
+	require.Contains(t, pi, "you never create, ask for or hold it")
+	require.NotContains(t, tools["get_trace_diagnostics"].Tool.Description, "expired: create_ingest_key")
+	require.Contains(t, cik, "The key is returned into this conversation. For a person's own machine, prefer the console's Create a tracing key "+
+		"and the terminal line it shows, so the key never enters a chat.")
 	require.Contains(t, tools["create_api_key"].Tool.Description, "create_ingest_key")
 	require.NotContains(t, tools["create_api_key"].Tool.Description, "minting one needs a write or admin key")
 }
