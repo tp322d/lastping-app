@@ -78,8 +78,11 @@ func registerTraceSetupTools(s *server.MCPServer) {
 				"You never create, ask for or hold the tracing key: the person creates it on the monitor's Connect page and stores it "+
 				"from their own terminal with the block's `key_line`, so the key never enters the chat. For Claude Code and Codex, write the "+
 				"block's `bang_script` and ask the person to review it and run `bang_command` with the tool's ! prefix. Claude Code's merges "+
-				"~/.claude/settings.json and, when the LastPing hook reports for this monitor, removes the LastPing reporting block from "+
-				"CLAUDE.md, with backups. Codex's writes the [otel] block and the stored key into ~/.codex/config.toml, with a backup, "+
+				"~/.claude/settings.json and, when the LastPing hook reports for this monitor and python3 works, removes the LastPing reporting "+
+				"block from ~/.claude/CLAUDE.md and from a ./CLAUDE.md outside a git repository, with backups (one inside a git repository "+
+				"is left for the person to edit, and the script says so). If ~/.claude/settings.json already sends Claude Code's telemetry "+
+				"to another LastPing monitor, it changes nothing and exits 6 naming that monitor; move tracing only after the person agrees, "+
+				"with LASTPING_REPLACE=1 before the command. Codex's writes the [otel] block and the stored key into ~/.codex/config.toml, with a backup, "+
 				"and changes nothing when another exporter is configured there. Never open, read or merge ~/.codex/config.toml yourself: "+
 				"it holds keys; check it only with a count such as grep -c."),
 			mcp.WithString("monitor_id", mcp.Required(), mcp.Description("Monitor UUID (from create_monitor or list_monitors).")),

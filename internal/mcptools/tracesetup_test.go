@@ -233,7 +233,9 @@ func TestTraceSetupTools_DescribeTheCredentialRules(t *testing.T) {
 		require.Contains(t, gts, want)
 	}
 	require.NotContains(t, gts, "get the key with create_ingest_key")
-	require.Contains(t, gts, "removes the LastPing reporting block from CLAUDE.md, with backups")
+	require.Contains(t, gts, "removes the LastPing reporting block from ~/.claude/CLAUDE.md and from a ./CLAUDE.md outside a git repository, with backups")
+	require.Contains(t, gts, "one inside a git repository is left for the person to edit")
+	require.Contains(t, gts, "exits 6 naming that monitor; move tracing only after the person agrees, with LASTPING_REPLACE=1 before the command. Codex's writes")
 	// No description sends an agent to mint the key a person's own machine
 	// traces with.
 	require.NotContains(t, cik, "This is the credential get_trace_setup's steps need")

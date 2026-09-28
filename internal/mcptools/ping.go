@@ -44,7 +44,7 @@ func registerPingTools(s *server.MCPServer, pingHost string) {
 				"existing install is upgraded. hook_install is Claude Code specific: if you are a DIFFERENT AI agent — even one with its own hook or "+
 				"event system, Cursor, Windsurf, a custom framework — do NOT translate its steps into your own hooks; the event semantics differ and a "+
 				"translated install can pass its own verification while never reporting, so use `how_to` instead. "+
-				"If you ARE Codex, pass tool \"codex\": `hook_install` is then Codex's own install (a script and two hooks in ~/.codex/hooks.json, "+
+				"If you ARE Codex, pass tool \"codex\": `hook_install` is then Codex's own install (a script and three hooks, SessionStart, UserPromptSubmit and Stop, in ~/.codex/hooks.json, "+
 				"trusted by the person in /hooks), and `how_to` says what Codex's sandbox does to pings you send yourself. "+
 				"If what you are monitoring is launched as a command instead — a cron job, a CI step, a script, or an agent started from a shell — use "+
 				"`run_wrapper`: wrap the command with `lastping run` and a separate process reports for you, so nothing has to be remembered; the tradeoff is "+

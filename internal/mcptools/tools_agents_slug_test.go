@@ -70,6 +70,11 @@ func TestUpdateAgent_DescriptionStatesTheSlugEffects(t *testing.T) {
 		"only when the person asks",
 		"saved links, Terraform references and trace sources (service.name) that name the old slug stop matching this agent, " +
 			"unless they also equal its name (case-insensitive)",
+		// Attribution is resolved when runs are read, and a slug outranks a
+		// name match or an adoption.
+		"That reaches back: past traced runs from the old slug's source on monitors this agent does not own lose this agent",
+		"A slug also outranks another agent's name match or adopted source",
+		"takes that source's traces, past runs included",
 	} {
 		assert.Contains(t, d, want)
 	}

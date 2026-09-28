@@ -144,8 +144,11 @@ func registerAgentTools(s *server.MCPServer) {
 				"the slug: the slug changes only when you pass slug, so a name-only call keeps every reference working. Change the slug "+
 				"only when the person asks for it. A new slug must be unique in the project (a clash is refused and names the slug), and "+
 				"changing it means saved links, Terraform references and trace sources (service.name) that name the old slug stop "+
-				"matching this agent, unless they also equal its name (case-insensitive). Monitors attached to the agent stay "+
-				"attached either way."),
+				"matching this agent, unless they also equal its name (case-insensitive). That reaches back: past traced runs "+
+				"from the old slug's source on monitors this agent does not own lose this agent and drop out of its runs, while "+
+				"its dependency totals keep them. A slug also outranks another agent's name match or adopted source, so a new "+
+				"slug equal to a source another agent receives that way takes that source's traces, past runs included. "+
+				"Monitors attached to the agent stay attached either way."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Agent UUID (from register_agent or list_agents).")),
 			mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable agent name, e.g. 'Deploy Bot'.")),
 			mcp.WithString("description", mcp.Description("Free-text description of what this agent does. Omit to leave the agent's "+
@@ -154,7 +157,8 @@ func registerAgentTools(s *server.MCPServer) {
 			mcp.WithString("slug", mcp.Description("New slug for the agent, e.g. 'reddit-bot': 3-50 characters, lowercase letters, "+
 				"digits and hyphens. Omit to keep the current slug, which is the default: pass it only when the person asks to change "+
 				"the slug. Saved links, Terraform references and trace sources that name the old slug stop matching this agent, "+
-				"unless they also equal its name (case-insensitive).")),
+				"unless they also equal its name (case-insensitive), past traced runs included; a slug equal to a source another "+
+				"agent receives by name or adoption takes that source's traces.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
