@@ -167,6 +167,13 @@ const notifyMinRunClearSentinel = 0
 // of zero is what makes its sentinel safe.
 const runawayCeilingClearSentinel = 0
 
+// stallNeedsStepsSentence is the sentence the hosted server uses on every
+// surface to say that stall detection only works for a job that calls /step.
+// The Claude Code hook and the reporting prompt never send a step, so an
+// agent that arms step_timeout_s on a monitor they report to gets a stalled
+// incident on every run. Matches the hosted server at mcp.lastping.dev.
+const stallNeedsStepsSentence = "Stall detection needs your job to call /step: the Claude Code hook and the reporting prompt do not send steps, so leave step_timeout_s unset for them."
+
 // detectionDescriptions are shared between create_monitor and update_monitor so
 // the two tools cannot drift into describing the same field differently.
 const (
@@ -174,7 +181,9 @@ const (
 		"This is how you stop a single transient blip from paging someone: set 2-5 on a job that fails occasionally for reasons that resolve themselves, " +
 		"and no incident opens until that many runs in a row have failed. Any success resets the count to zero. " +
 		"It gates the 'fail' cause ONLY — silence (a missed ping), overrun, never_started and runaway are time- or rate-based, " +
-		"so a consecutive count means nothing for them and they are never delayed by it. Range 1-100."
+		"so a consecutive count means nothing for them and they are never delayed by it. " +
+		"A run that ends on the model provider's API error (server_error, overloaded, rate_limit) neither counts toward it nor resets it: " +
+		"those open an 'upstream' incident once 3 runs in a row end that way, or this many when it is higher. Range 1-100."
 
 	maxRuntimeDesc = "Maximum seconds a single run may take before it is reported overdue (the 'overrun' rule), measured from the run's start ping. " +
 		"Omit to fall back to grace_s. This is how a long job avoids being flagged overdue while still being detected quickly if it goes silent: " +
@@ -195,6 +204,7 @@ const (
 		"max_runtime_s alone tells you nothing until the whole budget expires; step_timeout_s=300 on a 4-hour budget tells you within five minutes, and names the last step that reported. " +
 		"To use it the run must report steps: call get_ping_instructions and use curl_step (POST <ping_url>/step?rid=<run-id>&step=<name>). " +
 		"A monitor with step_timeout_s set whose job never reports a step will open a stalled incident on EVERY run — set the field and instrument the job in the same change. " +
+		stallNeedsStepsSentence + " " +
 		"Default: unset, which disables stall detection entirely; a monitor that sets nothing behaves exactly as it did before this field existed. Range 10-86400. " +
 		"Two constraints. (1) It must be strictly LESS than the effective run budget, COALESCE(max_runtime_s, grace_s), or the API returns 400 STEP_TIMEOUT_EXCEEDS_BUDGET — " +
 		"at or above the budget the run overruns first, so the stall rule could never fire. (2) Not supported on http monitors: a probe never arms a run and has no /step endpoint to call, " +
@@ -208,9 +218,9 @@ const (
 	blockedTimeoutDesc = "Maximum seconds a run may sit in the 'blocked' state (an agent reported it is waiting on a human) before a 'blocked' incident opens. " +
 		"UNSET DOES NOT MEAN WAIT FOREVER: omitting this does not disable the timeout, it falls back to the default, which is 24 HOURS — an agent " +
 		"still blocked 24 hours after reporting so, with this field never set, gets a 'blocked' incident regardless. Lower it to be paged sooner when a stuck " +
-		"approval is urgent; raise it for work that legitimately waits on a human for longer than a day. This is distinct from the immediate, non-incident " +
-		"'blocked' notification a route on the 'blocked' event type delivers the moment the agent reports it (see set_route) — that fires right away; this field " +
-		"governs the separate incident that opens only if the wait outlives the timeout. Accepted on every monitor_type: unlike max_runtime_s/step_timeout_s it has " +
+		"approval is urgent; raise it for work that legitimately waits on a human for longer than a day. This is distinct from the non-incident " +
+		"'blocked' notification a route on the 'blocked' event type delivers (see set_route), which is held 10 minutes and sent only if the run is still blocked then, " +
+		"at most once per blocked stretch of a run; this field governs the separate incident that opens only if the wait outlives the timeout. Accepted on every monitor_type: unlike max_runtime_s/step_timeout_s it has " +
 		"no run-scoped precondition an http monitor could fail, so there is nothing to reject."
 
 	expectEveryDesc = "SILENCE FLOOR in seconds: open a 'silence' incident if NO ping of any kind — success, start, fail, step — has arrived within this window, " +
@@ -566,7 +576,8 @@ func registerCheckTools(s *server.MCPServer) {
 	// snooze_monitor
 	s.AddTool(
 		newTool("snooze_monitor",
-			mcp.WithDescription("Set or clear a maintenance window on a monitor. During the window the monitor will not alert. "+
+			mcp.WithDescription("Set or clear a maintenance window on a monitor. The window holds deadline incidents (a missed, late or never-started run, an overrun, a stall, and a blocked run outliving blocked_timeout_s) and, on an HTTP monitor, failing probes: those are recorded but open no incident, and a site still failing when the window ends opens one on its next failure. "+
+				"Everything the job reports itself still notifies: its own fail ping, the page a blocked ping queues, a runaway ping rate, and any routed note, started, success or every-run event. "+
 				"Provide exactly one of: duration (e.g. '1h', '24h'), until (RFC 3339 timestamp), or clear=true to remove the window."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),
 			mcp.WithString("duration", mcp.Description("Go duration string, e.g. '1h' or '24h'. Use this OR until OR clear.")),

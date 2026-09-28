@@ -94,7 +94,8 @@ func registerObservabilityTools(s *server.MCPServer) {
 		newTool("get_agent_dependencies",
 			mcp.WithDescription("What one agent calls, heaviest first, from its OpenTelemetry traces: each model, tool, HTTP host, "+
 				"database, queue, RPC endpoint or other agent, with calls, errors, error_rate (0 to 1), p50_ms and p95_ms, "+
-				"a daily series, and for a model its tokens and estimated cost_usd. p95_ms is a bucket ceiling, not an exact value; "+
+				"a daily series, and for a model its tokens, cost_usd and cost_source (client when every priced call's cost was "+
+				"reported by the client, estimated when LastPing priced every call at API list prices, mixed for both). p95_ms is a bucket ceiling, not an exact value; "+
 				"p95_is_floor true means over 60 seconds. For an outgoing row, operations names up to five span names the agent "+
 				"used against it (sampled from its ten newest traced runs). direction=in lists who calls this agent instead, and "+
 				"direction=all both. At most 50 rows; `more` counts the rest. Use it to answer \"what does this agent depend on\", "+
@@ -127,12 +128,22 @@ func registerObservabilityTools(s *server.MCPServer) {
 		newTool("get_agent_usage",
 			mcp.WithDescription("Model usage, one row per model per UTC day: tokens_in (which INCLUDES cache reads, so never add "+
 				"tokens_cache_read to it), tokens_out, tokens_cache_read, tokens_cache_write, cost_usd (decimal text) and cost_source: "+
-				"client when the tool reported its own cost, estimated when LastPing priced the tokens, empty when unknown. origin is "+
+				"client when the tool reported its own cost, estimated when LastPing priced the tokens at API list prices, mixed "+
+				"when a traced day holds both, empty when unknown. origin is "+
 				"traces or metrics; a day and model can have one of each, and the two are never summed. With id, one agent's usage; "+
-				"without id, the whole project's, traces only, plus by_agent (each agent's totals, costliest first). "+
+				"without id, the whole project's, traces only, plus by_agent (each agent's totals, costliest first). Both carry "+
+				"by_project: per project (the folder a Claude Code session worked in) its runs, tokens and cost, from traced "+
+				"runs only (project_scope traces_only), costliest first. by_project need not sum to or match days: it sums each "+
+				"run's traced totals (every span's tokens; the traces' cost, estimated at list prices or the client's per-call cost "+
+				"where attached, as its cost_source says), while days, for one agent, prefer a Claude Code metrics export's "+
+				"reported cost for a day and model. With project, days become one row per UTC day with model and provider empty "+
+				"(a run's totals are not split by model); project narrows days and by_project, not by_agent. "+
 				envelopeSentence),
 			mcp.WithString("id", mcp.Description("Agent UUID or slug (from list_agents). Omit for every agent in the project.")),
 			mcp.WithString("range", mcp.Enum(dependencyRanges...), mcp.Description(rangeParamDesc)),
+			mcp.WithString("project", mcp.Description("Only usage from traced runs of this project; metrics-only usage has no project and is left out. "+
+				"days then hold one row per UTC day with model and provider empty (a run's totals are not split by model); "+
+				"by_agent is not narrowed.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -141,6 +152,7 @@ func registerObservabilityTools(s *server.MCPServer) {
 			}
 			q := url.Values{}
 			setIf(q, "range", req.GetString("range", ""))
+			setIf(q, "project", req.GetString("project", ""))
 			id := req.GetString("id", "")
 			// by_project.project is the Claude Code hook's ?project= label,
 			// chosen by whoever holds a ping URL (the same authorship as
@@ -225,16 +237,19 @@ func registerObservabilityTools(s *server.MCPServer) {
 			mcp.WithDescription("Why traces, metrics or logs sent to one monitor did or did not arrive: the newest 20 ingest attempts "+
 				"(kept 7 days), last_accepted_at, and a summary of the monitor's newest traced run. Call it after sending the test span "+
 				"get_trace_setup describes, and whenever a person says their agent is sending and nothing shows up. Each attempt has "+
-				"outcome (accepted or refused), a reason code, span_count, bytes, protocol, user_agent and signal. Refusals: "+
+				"an outcome, a reason code, span_count, bytes, protocol, user_agent and signal; outcome is accepted, refused (the "+
+				"export was rejected, or kept nothing for a reason worth fixing: see reason) or dropped (answered 202; routine, "+
+				"nothing to fix). Rejected: "+
 				"unsupported_media_type (set the protocol to http/protobuf; gRPC sent to the HTTP URL lands here), body_too_large "+
 				"(over 1 MB: smaller batches), too_many_spans or too_many_records (over 500 in one batch: export more often), "+
 				"unknown_monitor (no lastping.monitor_id, or one outside this project: set it, or use a tracing key bound to the "+
 				"monitor), expired_key (mistyped, revoked or expired: create_ingest_key), wrong_scope (that key cannot send "+
 				"telemetry: use a tracing key), wrong_project, monitor_mismatch (the batch named a different monitor from the key's), "+
 				"over_budget or over_log_budget (the daily budget; resets 00:00 UTC), rate_limited, busy (retry) and malformed. "+
-				"Answered 202 but kept nothing: future_start (check the sending machine's clock), unknown_event, unknown_metric, "+
-				"cumulative_temporality and invalid_point (routine, nothing to fix); too_many_series means new model series past the "+
-				"daily limit were dropped. Two failures leave NO row: an exporter using gRPC against the gRPC port, and a missing or "+
+				"Answered 202 but kept nothing, outcome refused because there is something to fix: future_start (check the sending "+
+				"machine's clock) and too_many_series (new model series past the daily limit were not kept). Answered 202 and kept "+
+				"nothing, outcome dropped: unknown_event, unknown_metric, cumulative_temporality and invalid_point. Two failures leave "+
+				"NO row: an exporter using gRPC against the gRPC port, and a missing or "+
 				"wrong key; an empty list means check those two first. "+envelopeSentence),
 			mcp.WithString("monitor_id", mcp.Required(), mcp.Description("Monitor UUID (from create_monitor or list_monitors).")),
 		),
