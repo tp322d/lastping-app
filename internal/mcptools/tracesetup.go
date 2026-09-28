@@ -82,7 +82,8 @@ func registerTraceSetupTools(s *server.MCPServer) {
 				"block from ~/.claude/CLAUDE.md and from a ./CLAUDE.md outside a git repository, with backups (one inside a git repository "+
 				"is left for the person to edit, and the script says so). If ~/.claude/settings.json already sends Claude Code's telemetry "+
 				"to another LastPing monitor, it changes nothing and exits 6 naming that monitor; move tracing only after the person agrees, "+
-				"with LASTPING_REPLACE=1 before the command. Codex's writes the [otel] block and the stored key into ~/.codex/config.toml, with a backup, "+
+				"with LASTPING_REPLACE=1 before the command. If they keep the other monitor, stop there: no tracing key is stored for this one, "+
+				"and one already stored breaks the other monitor's tracing until its own key is stored again with its own key line. Codex's writes the [otel] block and the stored key into ~/.codex/config.toml, with a backup, "+
 				"and changes nothing when another exporter is configured there. Never open, read or merge ~/.codex/config.toml yourself: "+
 				"it holds keys; check it only with a count such as grep -c."),
 			mcp.WithString("monitor_id", mcp.Required(), mcp.Description("Monitor UUID (from create_monitor or list_monitors).")),
