@@ -12,7 +12,7 @@
 // cooperating, knowing about LastPing, or even being an agent. If the
 // process ran, the run is reported; if it exited, the run is closed.
 //
-// On an on_demand monitor core/check.recomputeDeadlines arms no deadline
+// On an on_demand monitor the server arms no deadline
 // between runs, so a lapsed agent is indistinguishable from an idle one — a
 // false all-clear. A wrapper is the only one of the three mechanisms with no
 // window in which that can happen.
@@ -190,8 +190,8 @@ func Run(opts Options) (int, error) {
 	waitErr := cmd.Wait()
 	code := exitCodeOf(waitErr)
 
-	// A run we interrupted is reported as cancelled, not failed. core/check's
-	// applyCancel ends the outstanding run and disarms the overrun guard without
+	// A run we interrupted is reported as cancelled, not failed. The server's
+	// cancel handling ends the outstanding run and disarms the overrun guard without
 	// opening an incident, which is exactly right: an operator pressing Ctrl-C
 	// is not the monitored thing breaking. Reporting the 130/143 exit as a
 	// failure instead would page someone for their own keystroke — and reporting

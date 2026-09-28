@@ -1,26 +1,24 @@
 package mcptools
 
 // run_expectations.go — the declare_run_expectations tool: a pure proxy to
-// POST /api/v1/checks/{id}/runs/{rid}/expectations (api/run_assertions.go).
+// POST /api/v1/checks/{id}/runs/{rid}/expectations.
 //
 // WHY a separate file from assertions.go: assertions.go's PUT
 // /api/v1/checks/{id}/assertions is a per-MONITOR, replace-the-set,
 // human-authored resource (each entry carries a `name`). This tool declares a
-// per-RUN, declare-ONCE, agent-authored set that has no name at all — see
-// api/run_assertions.go's runAssertionDTO doc comment for why a run
-// assertion carries no name column and never will. Keeping the two in
-// separate files is what keeps that difference visible rather than inviting
-// exactly the drift Task 2's review flagged: code that "helpfully"
-// synthesises a name for a run assertion when there is none to synthesise.
+// per-RUN, declare-ONCE, agent-authored set that has no name at all: the API
+// stores no name for a run assertion. Keeping the two in separate files is
+// what keeps that difference visible rather than inviting code that
+// "helpfully" synthesises a name for a run assertion when there is none to
+// synthesise.
 //
 // This tool does NO validation of its own — it decodes the `assertions` JSON
 // argument only far enough to shape the request body, and lets the API be
 // the single source of truth for what a valid assertion is
-// (core/assertion.Validate, called server-side, on every write). That keeps
-// this file a pure proxy, consistent with every other tool in this package,
-// and is why agentprompt_boundary_test.go's import guarantee is untouched by
-// this file: nothing here reasons about prompts or validity, only about
-// shuttling JSON to and from one HTTP endpoint.
+// (validated server-side, on every write). That keeps this file a pure proxy,
+// consistent with every other tool in this package: nothing here reasons
+// about prompts or validity, only about shuttling JSON to and from one HTTP
+// endpoint.
 import (
 	"bytes"
 	"context"
@@ -34,8 +32,7 @@ import (
 )
 
 // runExpectationDeclaration is one entry of the `assertions` argument — the
-// wire shape POST .../runs/{rid}/expectations accepts, matching
-// api/run_assertions.go's runAssertionDTO field-for-field. Deliberately no
+// wire shape POST .../runs/{rid}/expectations accepts, field for field. Deliberately no
 // `name` and no `id`: see this file's package doc comment.
 type runExpectationDeclaration struct {
 	Kind  string `json:"kind"`
@@ -105,7 +102,7 @@ func registerRunExpectationTools(s *server.MCPServer) {
 // POST /api/v1/checks/{id}/runs/{rid}/expectations. rawAssertions is decoded
 // only to shape the outgoing JSON body — every semantic rule (required
 // fields per kind, regexp validity, dotted-path syntax, the 20-entry cap) is
-// left to the API's own core/assertion.Validate call, not duplicated here.
+// left to the API's own validation, not duplicated here.
 func (c *APIClient) declareRunExpectations(ctx context.Context, checkID, rid, rawAssertions string) (*mcp.CallToolResult, error) {
 	raw := strings.TrimSpace(rawAssertions)
 	var entries []runExpectationDeclaration

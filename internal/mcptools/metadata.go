@@ -35,11 +35,9 @@ import (
 
 // Metadata this server reports about itself.
 //
-// These values match server.json in the private monorepo, which is the
-// manifest published to registry.modelcontextprotocol.io, and the constants
-// the hosted server reports. Three copies of four facts is not ideal; the
-// monorepo asserts its pair against each other in a test, and this copy is
-// pinned by TestMetadata_MatchesPublishedIdentity below so a change here is at
+// These values match the manifest published to registry.modelcontextprotocol.io
+// and the values the hosted server at mcp.lastping.dev reports. Three copies
+// of four facts is not ideal; this copy is pinned by TestMetadata_MatchesPublishedIdentity below so a change here is at
 // least deliberate rather than accidental.
 const (
 	// ServerName is the transport-level implementation name — what a client
