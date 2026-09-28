@@ -15,9 +15,9 @@ import (
 
 // TestUpdateAgent_SlugSentOnlyWhenPassed: a slug argument reaches the PATCH
 // body and the returned agent carries it; a name-only call sends no slug key
-// at all (the API then keeps the stored slug), and neither does an empty
-// slug, which means "not asked". This matches the hosted server at
-// mcp.lastping.dev.
+// at all (the API then keeps the stored slug), and neither does an empty or
+// whitespace-only slug, which means "not asked". This matches the hosted
+// server at mcp.lastping.dev.
 func TestUpdateAgent_SlugSentOnlyWhenPassed(t *testing.T) {
 	var capturedBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -45,6 +45,7 @@ func TestUpdateAgent_SlugSentOnlyWhenPassed(t *testing.T) {
 	for _, args := range []map[string]interface{}{
 		{"id": "agent-1", "name": "Reddit Bot"},
 		{"id": "agent-1", "name": "Reddit Bot", "slug": ""},
+		{"id": "agent-1", "name": "Reddit Bot", "slug": "   "},
 	} {
 		result = callTool(t, s, c, "update_agent", args)
 		require.False(t, result.IsError, extractText(result))
