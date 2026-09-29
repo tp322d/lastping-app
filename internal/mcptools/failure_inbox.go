@@ -1,9 +1,8 @@
 package mcptools
 
 // failure_inbox.go — the two tools that close the failure-delivery loop over
-// MCP: list_open_incidents (a proxy to GET /api/v1/agents/{id}/open-incidents,
-// api/agent_inbox.go) and add_incident_note (a proxy to
-// POST /api/v1/incidents/{id}/notes, api/incident_notes.go).
+// MCP: list_open_incidents (a proxy to GET /api/v1/agents/{id}/open-incidents)
+// and add_incident_note (a proxy to POST /api/v1/incidents/{id}/notes).
 //
 // The loop is: an agent reads why its last run failed, then writes back a
 // diagnosis a human can read. Both endpoints shipped, deployed and documented
@@ -30,11 +29,9 @@ package mcptools
 // reaches the agent without a change here, and a field it already returns
 // cannot be silently dropped by a narrow local type.
 //
-// That last property is also the import boundary: nothing in this file
-// imports core/assertion, core/failprint or internal/agentprompt, and nothing
-// here needs to. It shuttles JSON to and from two HTTP endpoints. See
-// agentprompt_boundary_test.go, which enforces that mechanically with
-// `go list -deps -test`.
+// That last property also keeps this file a thin client: it evaluates no
+// assertions, builds no failure summaries and writes no prompts, and nothing
+// here needs to. It shuttles JSON to and from two HTTP endpoints.
 
 import (
 	"bytes"
@@ -47,8 +44,8 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// defaultOpenIncidentLimit matches the API's own default (api/events.go's
-// parseLimit). It is sent explicitly rather than omitted so the tool's stated
+// defaultOpenIncidentLimit matches the API's own default page size. It is
+// sent explicitly rather than omitted so the tool's stated
 // default cannot drift from the one the agent actually gets.
 const defaultOpenIncidentLimit = 50
 
@@ -251,7 +248,7 @@ func (c *APIClient) listOpenIncidents(ctx context.Context, agentID string, limit
 //
 // The request carries the body and nothing else: no author, because
 // authorship follows the surface a note arrived on and is not the caller's to
-// declare (see api/incident_notes.go), and no created_at, because a note's
+// declare, and no created_at, because a note's
 // position in the incident's log must not be back-datable by its writer.
 func (c *APIClient) addIncidentNote(ctx context.Context, incidentID int, body string) (*mcp.CallToolResult, error) {
 	data, err := json.Marshal(map[string]string{"body": body})

@@ -40,7 +40,7 @@
     }
     .line { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
 
-    /* The pulse travels, then the run stops and the line goes flat and red --
+    /* The beat travels, then the run stops and the line goes flat and red --
        the product's whole premise in six seconds. */
     .beat  { animation: run 6s linear infinite; }
     .flat  { animation: stop 6s linear infinite; }

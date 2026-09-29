@@ -81,10 +81,9 @@ func TestMetadata_IsNotEmptyOrPlaceholder(t *testing.T) {
 // TestMetadata_MatchesPublishedIdentity pins this copy against the values the
 // hosted server and the registry manifest carry.
 //
-// The same four facts now live in three places: server.json in the private
-// monorepo (published to registry.modelcontextprotocol.io), the monorepo's own
-// constants, and this file. The monorepo asserts its pair against each other.
-// This test cannot reach either — it is a separate repository with no
+// The same four facts now live in three places: the manifest published to
+// registry.modelcontextprotocol.io, the hosted server at mcp.lastping.dev,
+// and this file. This test cannot reach either — it is a separate repository with no
 // dependency on them — so it pins the literals instead.
 //
 // That is weaker than a real cross-check and it is deliberately written out in

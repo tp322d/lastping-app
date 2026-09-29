@@ -586,7 +586,7 @@ func TestRandomRIDShape(t *testing.T) {
 		seen[rid] = true
 	}
 	// Not a randomness test — just proof that a fresh id is minted per call
-	// rather than a constant, since core/check pairs start with success by rid.
+	// rather than a constant, since the server pairs start with success by rid.
 	if len(seen) < 90 {
 		t.Errorf("only %d distinct rids in 100 calls", len(seen))
 	}

@@ -24,8 +24,8 @@ package mcptools
 // for a field whose every value was wrong is the reason this table exists
 // rather than a tweak to a few tools.
 //
-// This file is the counterpart of the same file in the private monorepo, which
-// serves mcp.lastping.dev. The hosted server was corrected first; until this
+// This table matches the hosted server at mcp.lastping.dev. The hosted server
+// was corrected first; until this
 // landed, the server people INSTALL described its tools differently from the
 // server people CONNECT to — the two disagreeing not about which tools exist,
 // which wantTools already guards, but about what they do.
