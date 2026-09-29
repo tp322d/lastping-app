@@ -238,16 +238,17 @@ func registerObservabilityTools(s *server.MCPServer) {
 				"(kept 7 days), last_accepted_at, and a summary of the monitor's newest traced run. Call it after sending the test span "+
 				"get_trace_setup describes, and whenever a person says their agent is sending and nothing shows up. Each attempt has "+
 				"an outcome, a reason code, span_count, bytes, protocol, user_agent and signal; outcome is accepted, refused (the "+
-				"export was rejected, or kept nothing for a reason worth fixing: see reason) or dropped (answered 202; routine, "+
+				"export was rejected, or some or all of it was not kept for a reason worth fixing: see reason) or dropped (answered 202; routine, "+
 				"nothing to fix). Rejected: "+
 				"unsupported_media_type (set the protocol to http/protobuf; gRPC sent to the HTTP URL lands here), body_too_large "+
 				"(over 1 MB: smaller batches), too_many_spans or too_many_records (over 500 in one batch: export more often), "+
 				"unknown_monitor (no lastping.monitor_id, or one outside this project: set it, or use a tracing key bound to the "+
-				"monitor), expired_key (mistyped, revoked or expired: create_ingest_key), wrong_scope (that key cannot send "+
+				"monitor), expired_key (mistyped, revoked or expired: the person creates a new tracing key on the monitor's Connect page and stores it with its key line), wrong_scope (that key cannot send "+
 				"telemetry: use a tracing key), wrong_project, monitor_mismatch (the batch named a different monitor from the key's), "+
 				"over_budget or over_log_budget (the daily budget; resets 00:00 UTC), rate_limited, busy (retry) and malformed. "+
 				"Answered 202 but kept nothing, outcome refused because there is something to fix: future_start (check the sending "+
-				"machine's clock) and too_many_series (new model series past the daily limit were not kept). Answered 202 and kept "+
+				"machine's clock). Also refused: too_many_series (the data points of new model series past the daily limit were not "+
+				"kept; the rest of that request may have been stored). Answered 202 and kept "+
 				"nothing, outcome dropped: unknown_event, unknown_metric, cumulative_temporality and invalid_point. Two failures leave "+
 				"NO row: an exporter using gRPC against the gRPC port, and a missing or "+
 				"wrong key; an empty list means check those two first. "+envelopeSentence),

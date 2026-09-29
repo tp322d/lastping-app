@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -138,15 +139,26 @@ func registerAgentTools(s *server.MCPServer) {
 	// update_agent
 	s.AddTool(
 		newTool("update_agent",
-			mcp.WithDescription("Update an existing LastPing agent's name/description by UUID using merge-patch semantics: only the "+
-				"fields you supply are changed, and any field you omit keeps its current stored value. slug is derived from name at "+
-				"creation and is immutable — this can rename the agent's display name, but never its slug, so anything that already "+
-				"references it by slug (including monitors attached via agent_id) keeps working."),
+			mcp.WithDescription("Update an existing LastPing agent's name, description or slug by UUID using merge-patch semantics: "+
+				"only the fields you supply are changed, and any field you omit keeps its current stored value. Renaming never changes "+
+				"the slug: the slug changes only when you pass slug, so a name-only call keeps every reference working. Change the slug "+
+				"only when the person asks for it. A new slug must be unique in the project (a clash is refused and names the slug), and "+
+				"changing it means saved links, Terraform references and trace sources (service.name) that name the old slug stop "+
+				"matching this agent, unless they also equal its name (case-insensitive). That reaches back: past traced runs "+
+				"from the old slug's source on monitors this agent does not own lose this agent and drop out of its runs, while "+
+				"its dependency totals keep them. A slug also outranks another agent's name match or adopted source, so a new "+
+				"slug equal to a source another agent receives that way takes that source's traces, past runs included. "+
+				"Monitors attached to the agent stay attached either way."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Agent UUID (from register_agent or list_agents).")),
 			mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable agent name, e.g. 'Deploy Bot'.")),
 			mcp.WithString("description", mcp.Description("Free-text description of what this agent does. Omit to leave the agent's "+
 				"current description unchanged — THIS IS THE DEFAULT AND SAFE CHOICE for a name-only rename. Pass an explicit empty "+
 				"string to clear an existing description back to none.")),
+			mcp.WithString("slug", mcp.Description("New slug for the agent, e.g. 'reddit-bot': 3-50 characters, lowercase letters, "+
+				"digits and hyphens. Omit to keep the current slug, which is the default: pass it only when the person asks to change "+
+				"the slug. Saved links, Terraform references and trace sources that name the old slug stop matching this agent, "+
+				"unless they also equal its name (case-insensitive), past traced runs included; a slug equal to a source another "+
+				"agent receives by name or adoption takes that source's traces.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -308,6 +320,13 @@ func (c *APIClient) updateAgent(ctx context.Context, id string, req mcp.CallTool
 	// update_agent call can never silently wipe description.
 	if v, ok := args["description"].(string); ok {
 		body["description"] = v
+	}
+	// slug is sent only when the caller passed a non-empty one: an absent slug
+	// keeps the stored slug on the REST side, which is what makes a name-only
+	// rename unable to change it. An empty string means "not asked" here (a
+	// slug cannot be empty), never a request to clear it.
+	if v, ok := args["slug"].(string); ok && strings.TrimSpace(v) != "" {
+		body["slug"] = v
 	}
 
 	data, _ := json.Marshal(body)

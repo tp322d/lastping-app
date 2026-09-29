@@ -259,8 +259,10 @@ const wantGetPingInstructionsDesc = "" +
 	"property of your event loop instead of something you must remember — and it is the only mechanism that can send every state this product " +
 	"models, including blocked and note. Re-running hook_install replaces an older ~/.claude/lastping-report.sh (keeping a .bak), which is how an " +
 	"existing install is upgraded. hook_install is Claude Code specific: if you are a DIFFERENT AI agent — even one with its own hook or " +
-	"event system, Cursor, Windsurf, Codex, a custom framework — do NOT translate its steps into your own hooks; the event semantics differ and a " +
+	"event system, Cursor, Windsurf, a custom framework — do NOT translate its steps into your own hooks; the event semantics differ and a " +
 	"translated install can pass its own verification while never reporting, so use `how_to` instead. " +
+	"If you ARE Codex, pass tool \"codex\": `hook_install` is then Codex's own install (a script and three hooks, SessionStart, UserPromptSubmit and Stop, in ~/.codex/hooks.json, " +
+	"trusted by the person in /hooks), and `how_to` says what Codex's sandbox does to pings you send yourself. " +
 	"If what you are monitoring is launched as a command instead — a cron job, a CI step, a script, or an agent started from a shell — use " +
 	"`run_wrapper`: wrap the command with `lastping run` and a separate process reports for you, so nothing has to be remembered; the tradeoff is " +
 	"that it reports the process's own lifecycle (start, success, fail, cancel) and has no way to send blocked or note. " +
@@ -272,10 +274,12 @@ const wantGetPingInstructionsDesc = "" +
 	"And `discovery_how_to`, which is about the OTHER jobs on this host or in this repo: how to find the scheduled work nobody is watching yet " +
 	"and propose it, rather than monitoring only the one thing you were asked about. " +
 	"To send OpenTelemetry traces, read `tracing_how_to`, call get_trace_setup with the tool that sends the telemetry and carry " +
-	"its steps out yourself; the tracing key comes from create_ingest_key, never from your own API key. " +
+	"its steps out yourself, except the tracing key: the person creates it on the monitor's Connect page and stores it from " +
+	"their own terminal, so you never create, ask for or hold it, and never use your own API key instead. " +
 	"`otel_env_lines` is the minimal form: the `export` lines (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL, " +
 	"OTEL_RESOURCE_ATTRIBUTES, OTEL_EXPORTER_OTLP_HEADERS) to set in the child process's environment so its spans arrive on this " +
-	"monitor; fill in the tracing key placeholder yourself, it is not resolved server-side. An exporter that cannot set " +
+	"monitor; the person puts the tracing key in place of its placeholder, in their own terminal or file, never you (it is not " +
+	"resolved server-side). An exporter that cannot set " +
 	"headers can instead POST straight to `<ping_url>/v1/traces`: the monitor-URL form needs no Authorization header at all, since the monitor " +
 	"id in the URL is itself the capability."
 
@@ -365,4 +369,24 @@ func TestGetPingInstructions_NeverRendersTraceSetupBlocks(t *testing.T) {
 	assert.NotContains(t, text, "a block only get_trace_setup returns")
 	assert.Contains(t, text, `"tracing_how_to"`)
 	assert.Contains(t, text, "get_trace_setup")
+}
+
+// TestGetPingInstructions_ToolIsSentAsHookTool: `tool` reaches the API as
+// ?hook_tool=, and a call without it sends no query at all (the positive
+// companion: the default install is the API's to choose).
+func TestGetPingInstructions_ToolIsSentAsHookTool(t *testing.T) {
+	var queries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queries = append(queries, r.URL.RawQuery)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(pingInstructionsJSON))
+	}))
+	defer srv.Close()
+
+	c := mcptools.NewAPIClient(srv.URL, "test-key")
+	s := newTestServer(t, "https://ping.lastping.dev")
+
+	require.False(t, callTool(t, s, c, "get_ping_instructions", map[string]interface{}{"id": "abc-123", "tool": "codex"}).IsError)
+	require.False(t, callTool(t, s, c, "get_ping_instructions", map[string]interface{}{"id": "abc-123"}).IsError)
+	assert.Equal(t, []string{"hook_tool=codex", ""}, queries)
 }
