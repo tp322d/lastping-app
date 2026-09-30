@@ -32,10 +32,11 @@
 # two secrets set the script exits 1: that is a misconfiguration, not a
 # choice.
 #
-# Needs Go, Node.js (npx) and, to sign, openssl. Runs on Linux or macOS.
+# Needs Go, Node.js (npm, npx) and, to sign, openssl. Runs on Linux or macOS.
 set -euo pipefail
 
 MCPB_CLI='@anthropic-ai/mcpb@2.1.2'
+YAUZL='yauzl@3.4.0'
 MAKEFAT='github.com/randall77/makefat@v0.0.0-20260406194835-1b91746796b7'
 
 version="${1:-${VERSION:-}}"
@@ -121,25 +122,67 @@ bundle="$out/lastping-$version.mcpb"
 npx -y "$MCPB_CLI" validate "$stage/manifest.json"
 npx -y "$MCPB_CLI" pack "$stage" "$bundle"
 
+# Claude Desktop opens bundles with a strict zip reader, which rejects any
+# byte after the end of central directory record that the record's comment
+# length does not declare. Every bundle, signed or not, is checked for that
+# rule and opened with yauzl, the same kind of reader, before it ships.
+yauzl_dir="$(mktemp -d)"
+trap 'rm -rf "$secrets" "$yauzl_dir"' EXIT
+npm install --prefix "$yauzl_dir" --no-save --no-audit --no-fund --silent "$YAUZL" >/dev/null
+strict_check() {
+  node "$root/mcpb/zip.mjs" check "$1"
+  node "$root/mcpb/zip.mjs" open "$1" "$yauzl_dir"
+}
+
 if (( ! sign )); then
+  strict_check "$bundle"
   cp "$bundle" "$out/lastping.mcpb"
   echo "warning: MCPB_SIGNING_CERT and MCPB_SIGNING_KEY are not set; the bundle is UNSIGNED" >&2
   echo "built $bundle and $out/lastping.mcpb (unsigned)"
   exit 0
 fi
 
-cp "$bundle" "$secrets/unsigned.zip"
 sign_args=(--cert "${chain[0]}" --key "$secrets/key.pem")
 if (( ${#chain[@]} > 1 )); then
   sign_args+=(--intermediate "${chain[@]:1}")
 fi
-npx -y "$MCPB_CLI" sign "$bundle" "${sign_args[@]}"
+
+# mcpb sign appends its signature block after the zip and leaves the zip's
+# comment length at 0, so strict readers reject the result
+# (modelcontextprotocol/mcpb#278). Declaring the block as the zip comment
+# after signing would change the bytes the signature covers, so the length is
+# declared first: a probe signature measures the block, the zip is rewritten
+# with that comment length, and that zip is signed. Should a signature's
+# block come out a different length from the one declared, the zip is
+# declared again with the new length and signed again.
+cp "$bundle" "$secrets/packed.zip"
+cp "$bundle" "$secrets/probe.mcpb"
+npx -y "$MCPB_CLI" sign "$secrets/probe.mcpb" "${sign_args[@]}"
+size() { wc -c < "$1" | tr -d ' '; }
+block_len=$(( $(size "$secrets/probe.mcpb") - $(size "$secrets/packed.zip") ))
+signed=0
+for attempt in 1 2 3; do
+  node "$root/mcpb/zip.mjs" declare-comment "$secrets/packed.zip" "$secrets/unsigned.zip" "$block_len"
+  cp "$secrets/unsigned.zip" "$bundle"
+  npx -y "$MCPB_CLI" sign "$bundle" "${sign_args[@]}"
+  got=$(( $(size "$bundle") - $(size "$secrets/unsigned.zip") ))
+  if (( got == block_len )); then
+    signed=1
+    break
+  fi
+  echo "the signature block is $got bytes, not the declared $block_len; signing again (attempt $attempt)" >&2
+  block_len=$got
+done
+if (( ! signed )); then
+  echo "error: the signature block length did not settle after 3 attempts" >&2
+  exit 1
+fi
 
 # Verify with openssl, not `mcpb verify`: the mcpb CLI cannot check a PKCS#7
 # signature at all (its library does not implement it) and reports every
-# bundle unsigned. The signed file must be exactly the zip that was packed,
-# then MCPB_SIG_V1, a uint32 little-endian length, that many bytes of DER,
-# and MCPB_SIG_END. Split it at those boundaries and check each part.
+# bundle unsigned. The signed file must be exactly the zip that was signed
+# (the packed zip with its comment length declared), then MCPB_SIG_V1, a
+# uint32 little-endian length, that many bytes of DER, and MCPB_SIG_END. Split it at those boundaries and check each part.
 node -e '
   const fs = require("fs");
   const [signed, unsigned, zipOut, sigOut] = process.argv.slice(1);
@@ -193,5 +236,6 @@ else
   echo "signature verified; the certificate's trust was not checked (MCPB_CERT_CA_ISSUED is not 1)"
 fi
 
+strict_check "$bundle"
 cp "$bundle" "$out/lastping.mcpb"
 echo "built $bundle and $out/lastping.mcpb (signed)"
