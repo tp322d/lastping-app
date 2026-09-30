@@ -139,7 +139,7 @@ func reconcileProblemText(resp *http.Response) string {
 		Fix    string `json:"fix"`
 	}
 	if uErr := json.Unmarshal(raw, &p); uErr != nil || p.Title == "" {
-		return fmt.Sprintf("HTTP %d", resp.StatusCode)
+		return undecodableProblem(resp.StatusCode).Error()
 	}
 
 	var b strings.Builder

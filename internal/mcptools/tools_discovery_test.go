@@ -148,5 +148,23 @@ func TestDiscoverMonitorsReconcile_NonProblemBodyFallsBackToStatus(t *testing.T)
 
 	result := callTool(t, s, c, "discover_monitors_reconcile", map[string]interface{}{"sources": "[]"})
 	require.True(t, result.IsError)
-	assert.Contains(t, resultText(t, result), "HTTP 502")
+	assert.Equal(t, "LastPing API returned HTTP 502 with no details; try again in a minute", resultText(t, result))
+}
+
+// TestDiscoverMonitorsReconcile_UndecodableClientErrorSaysWhatHappened: a
+// non-5xx reply that is not a problem document gets the same sentence as every
+// other tool, never a bare status.
+func TestDiscoverMonitorsReconcile_UndecodableClientErrorSaysWhatHappened(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("<html>denied</html>"))
+	}))
+	defer srv.Close()
+
+	c := mcptools.NewAPIClient(srv.URL, "test-key")
+	s := newTestServer(t, "https://ping.lastping.dev")
+
+	result := callTool(t, s, c, "discover_monitors_reconcile", map[string]interface{}{"sources": "[]"})
+	require.True(t, result.IsError)
+	assert.Equal(t, "LastPing API refused the request (HTTP 403)", resultText(t, result))
 }
