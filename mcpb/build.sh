@@ -1,19 +1,28 @@
 #!/usr/bin/env bash
-# Builds the signed Claude Desktop extension, dist/mcpb/lastping-<version>.mcpb,
-# and a copy named lastping.mcpb (the version-less name the download link on
+# Builds the Claude Desktop extension, dist/mcpb/lastping-<version>.mcpb, and a
+# copy named lastping.mcpb (the version-less name the download link on
 # lastping.dev points at through releases/latest/download).
 #
+#   mcpb/build.sh v0.2.0                                   # unsigned
 #   MCPB_SIGNING_CERT='<PEM>' MCPB_SIGNING_KEY='<PEM>' mcpb/build.sh v0.2.0
 #
-# MCPB_SIGNING_CERT may also carry intermediate certificates after the signing
-# certificate; they are passed to `mcpb sign` as the chain.
+# Signing is optional. With neither secret set the bundle is built unsigned
+# and the script says so. With both set it is signed, and the build fails
+# unless the signature verifies:
+#   - the key must belong to the first certificate in MCPB_SIGNING_CERT;
+#   - openssl must verify the PKCS#7 signature over the bundle's zip bytes,
+#     and the signer must be that certificate.
+# Those checks do not ask whether anyone trusts the certificate. Set
+# MCPB_CERT_CA_ISSUED=1 for a certificate issued by a public CA, and the build
+# also verifies the chain against the system CA store (MCPB_CA_PATH, default
+# /etc/ssl/certs) and requires the Code Signing extended key usage.
 #
-# The bundle is signed or it is not built: with either secret missing the
-# script exits 1 before compiling anything, so no path through it produces an
-# unsigned bundle for the release job to upload. To try it locally, make a
-# throwaway pair with openssl and pass it the same way.
+# MCPB_SIGNING_CERT may carry intermediate certificates after the signing
+# certificate; they go into the signature as the chain. With only one of the
+# two secrets set the script exits 1: that is a misconfiguration, not a
+# choice.
 #
-# Needs Go and Node.js (npx). Runs on Linux or macOS.
+# Needs Go, Node.js (npx) and, to sign, openssl. Runs on Linux or macOS.
 set -euo pipefail
 
 MCPB_CLI='@anthropic-ai/mcpb@2.1.2'
@@ -26,8 +35,11 @@ if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
   exit 1
 fi
 
-if [[ -z "${MCPB_SIGNING_CERT:-}" || -z "${MCPB_SIGNING_KEY:-}" ]]; then
-  echo "error: MCPB_SIGNING_CERT and MCPB_SIGNING_KEY must both be set; an unsigned bundle is never built" >&2
+sign=0
+if [[ -n "${MCPB_SIGNING_CERT:-}" && -n "${MCPB_SIGNING_KEY:-}" ]]; then
+  sign=1
+elif [[ -n "${MCPB_SIGNING_CERT:-}" || -n "${MCPB_SIGNING_KEY:-}" ]]; then
+  echo "error: set both MCPB_SIGNING_CERT and MCPB_SIGNING_KEY to sign, or neither to build unsigned" >&2
   exit 1
 fi
 
@@ -39,18 +51,31 @@ mkdir -p "$stage/server"
 
 secrets="$(mktemp -d)"
 trap 'rm -rf "$secrets"' EXIT
-(
-  umask 077
-  # One file per certificate: the first signs, the rest are the chain.
-  printf '%s\n' "$MCPB_SIGNING_CERT" | awk -v dir="$secrets" '
-    /-----BEGIN CERTIFICATE-----/ { n++ }
-    n { print > (dir "/cert-" n ".pem") }'
-  printf '%s\n' "$MCPB_SIGNING_KEY" > "$secrets/key.pem"
-)
-chain=("$secrets"/cert-*.pem)
-if [[ ! -f "${chain[0]}" ]]; then
-  echo "error: MCPB_SIGNING_CERT holds no PEM certificate" >&2
-  exit 1
+if (( sign )); then
+  (
+    umask 077
+    # One file per certificate: the first signs, the rest are the chain.
+    printf '%s\n' "$MCPB_SIGNING_CERT" | awk -v dir="$secrets" '
+      /-----BEGIN CERTIFICATE-----/ { n++ }
+      n { print > (dir "/cert-" n ".pem") }'
+    printf '%s\n' "$MCPB_SIGNING_KEY" > "$secrets/key.pem"
+  )
+  # Nothing downloaded below (makefat, the mcpb CLI and its dependencies)
+  # inherits the secrets through the environment.
+  unset MCPB_SIGNING_CERT MCPB_SIGNING_KEY
+  chain=("$secrets"/cert-*.pem)
+  if [[ ! -f "${chain[0]}" ]]; then
+    echo "error: MCPB_SIGNING_CERT holds no PEM certificate" >&2
+    exit 1
+  fi
+  # A key that does not belong to the certificate still produces a signature
+  # block; refuse it before building anything.
+  if ! cert_pub="$(openssl x509 -noout -pubkey -in "${chain[0]}")" ||
+     ! key_pub="$(openssl pkey -pubout -in "$secrets/key.pem")" ||
+     [[ "$cert_pub" != "$key_pub" ]]; then
+    echo "error: MCPB_SIGNING_KEY does not belong to the first certificate in MCPB_SIGNING_CERT" >&2
+    exit 1
+  fi
 fi
 
 build() {
@@ -81,26 +106,78 @@ cp "$root/mcpb/icon.png" "$stage/icon.png"
 bundle="$out/lastping-$version.mcpb"
 npx -y "$MCPB_CLI" validate "$stage/manifest.json"
 npx -y "$MCPB_CLI" pack "$stage" "$bundle"
-sign_args=(--cert "$secrets/cert-1.pem" --key "$secrets/key.pem")
+
+if (( ! sign )); then
+  cp "$bundle" "$out/lastping.mcpb"
+  echo "warning: MCPB_SIGNING_CERT and MCPB_SIGNING_KEY are not set; the bundle is UNSIGNED" >&2
+  echo "built $bundle and $out/lastping.mcpb (unsigned)"
+  exit 0
+fi
+
+cp "$bundle" "$secrets/unsigned.zip"
+sign_args=(--cert "${chain[0]}" --key "$secrets/key.pem")
 if (( ${#chain[@]} > 1 )); then
   sign_args+=(--intermediate "${chain[@]:1}")
 fi
 npx -y "$MCPB_CLI" sign "$bundle" "${sign_args[@]}"
-# `mcpb verify` passes only when the certificate chains to the OS trust store.
-# A self-signed certificate signs correctly but fails that check, so it is
-# accepted only when MCPB_ALLOW_UNTRUSTED_CERT=1 says the owner chose one, and
-# then the signature block must still be on the end of the file.
-if ! npx -y "$MCPB_CLI" verify "$bundle"; then
-  if [[ "${MCPB_ALLOW_UNTRUSTED_CERT:-}" != "1" ]]; then
-    echo "error: the bundle's signature does not verify against a trusted certificate" >&2
-    exit 1
-  fi
-  if [[ "$(tail -c 12 "$bundle")" != "MCPB_SIG_END" ]]; then
-    echo "error: the bundle carries no signature block" >&2
-    exit 1
-  fi
-  echo "warning: signed with a certificate the OS does not trust (MCPB_ALLOW_UNTRUSTED_CERT=1)" >&2
-fi
-cp "$bundle" "$out/lastping.mcpb"
 
-echo "built $bundle and $out/lastping.mcpb"
+# Verify with openssl, not `mcpb verify`: the mcpb CLI cannot check a PKCS#7
+# signature at all (its library does not implement it) and reports every
+# bundle unsigned. The signed file must be exactly the zip that was packed,
+# then MCPB_SIG_V1, a uint32 little-endian length, that many bytes of DER,
+# and MCPB_SIG_END. Split it at those boundaries and check each part.
+node -e '
+  const fs = require("fs");
+  const [signed, unsigned, zipOut, sigOut] = process.argv.slice(1);
+  const f = fs.readFileSync(signed), z = fs.readFileSync(unsigned);
+  const head = Buffer.from("MCPB_SIG_V1"), foot = Buffer.from("MCPB_SIG_END");
+  const fail = (m) => { console.error("error: " + m); process.exit(1); };
+  if (f.length <= z.length + head.length + 4 + foot.length) fail("the bundle carries no signature block");
+  if (!f.subarray(0, z.length).equals(z)) fail("signing changed the zip bytes");
+  let o = z.length;
+  if (!f.subarray(o, o + head.length).equals(head)) fail("the signature block has no MCPB_SIG_V1 header");
+  o += head.length;
+  const n = f.readUInt32LE(o);
+  o += 4;
+  if (o + n + foot.length !== f.length) fail("the signature length does not match the block");
+  if (!f.subarray(o + n).equals(foot)) fail("the signature block has no MCPB_SIG_END footer");
+  fs.writeFileSync(zipOut, f.subarray(0, z.length));
+  fs.writeFileSync(sigOut, f.subarray(o, o + n));
+' "$bundle" "$secrets/unsigned.zip" "$secrets/payload.zip" "$secrets/sig.p7"
+
+if ! openssl cms -verify -binary -inform DER -in "$secrets/sig.p7" \
+  -content "$secrets/payload.zip" -noverify \
+  -signer "$secrets/signer.pem" -out /dev/null; then
+  echo "error: the bundle's signature does not verify" >&2
+  exit 1
+fi
+fingerprint() { openssl x509 -noout -fingerprint -sha256 -in "$1"; }
+if [[ "$(fingerprint "$secrets/signer.pem")" != "$(fingerprint "${chain[0]}")" ]]; then
+  echo "error: the bundle is signed by a certificate other than the first in MCPB_SIGNING_CERT" >&2
+  exit 1
+fi
+
+if [[ "${MCPB_CERT_CA_ISSUED:-}" == "1" ]]; then
+  ca_path="${MCPB_CA_PATH:-/etc/ssl/certs}"
+  # cms defaults to the S/MIME signing purpose, which a code signing
+  # certificate need not carry, and OpenSSL 3.0 (Ubuntu 24.04) has no
+  # codesign purpose. So the chain is checked for any purpose here and the
+  # Code Signing usage is checked on the certificate itself below.
+  if ! openssl cms -verify -binary -inform DER -in "$secrets/sig.p7" \
+    -content "$secrets/payload.zip" -CApath "$ca_path" -purpose any \
+    -out /dev/null; then
+    echo "error: the signing certificate does not chain to a CA in $ca_path" >&2
+    exit 1
+  fi
+  if ! openssl x509 -noout -ext extendedKeyUsage -in "${chain[0]}" |
+    grep -q 'Code Signing'; then
+    echo "error: the signing certificate lacks the Code Signing extended key usage" >&2
+    exit 1
+  fi
+  echo "signature verified; the certificate chains to $ca_path"
+else
+  echo "signature verified; the certificate's trust was not checked (MCPB_CERT_CA_ISSUED is not 1)"
+fi
+
+cp "$bundle" "$out/lastping.mcpb"
+echo "built $bundle and $out/lastping.mcpb (signed)"

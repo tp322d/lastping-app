@@ -4,7 +4,7 @@
   "display_name": "LastPing",
   "version": "0.0.0",
   "description": "Dead-man's-switch monitoring for cron jobs, CI/CD and AI agents: create monitors, read incidents and wire up check-ins from Claude.",
-  "long_description": "Most monitoring watches a thing and tells you when it looks wrong. LastPing waits for a thing to check in and tells you when it doesn't. A job that breaks can't send you an error, but it can fail to send you anything, and absence is the one signal a broken process can still produce.\n\nThis extension runs the LastPing MCP server on your computer. It carries the same tool set as the hosted server at mcp.lastping.dev, and calls the LastPing API with the key you enter at install. Claude Desktop keeps that key in your system keychain.",
+  "long_description": "Most monitoring watches a thing and tells you when it looks wrong. LastPing waits for a thing to check in and tells you when it doesn't. A job that breaks can't send you an error, but it can fail to send you anything, and absence is the one signal a broken process can still produce.\n\nThis extension runs the LastPing MCP server on your computer. It carries the tool set of the release it was built from, and calls the LastPing API with the key you enter at install. Claude Desktop keeps that key in your system keychain.",
   "author": {
     "name": "LastPing",
     "email": "hello@lastping.dev",

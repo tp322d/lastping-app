@@ -36,14 +36,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # The Claude Desktop extension. It waits for goreleaser because that job
-  # creates the release the bundle is uploaded to. build.sh exits 1 when the
-  # signing secrets are missing, so a tag without them publishes no bundle.
+  # The Claude Desktop extension. goreleaser creates the release as a draft,
+  # so nothing is public, and releases/latest still names the previous
+  # release, until this job has attached the bundle and published it. A tag
+  # whose bundle fails to build leaves a draft and never breaks the
+  # releases/latest/download/lastping.mcpb link on lastping.dev.
+  #
+  # Signing is optional: without the two secrets build.sh ships an unsigned
+  # bundle and says so in the log. Set the repository variable
+  # MCPB_CERT_CA_ISSUED to 1 only for a certificate from a public CA; the
+  # build then also checks its chain against the runner's CA store.
   mcpb:
     needs: goreleaser
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The token stays out of .git/config while downloaded build tools run.
+          persist-credentials: false
 
       - uses: actions/setup-go@v5
         with:
@@ -58,16 +68,20 @@ jobs:
         env:
           MCPB_SIGNING_CERT: ${{ secrets.MCPB_SIGNING_CERT }}
           MCPB_SIGNING_KEY: ${{ secrets.MCPB_SIGNING_KEY }}
-          # Set this repository variable to 1 only if the owner chose a
-          # self-signed certificate; see mcpb/build.sh.
-          MCPB_ALLOW_UNTRUSTED_CERT: ${{ vars.MCPB_ALLOW_UNTRUSTED_CERT }}
+          MCPB_CERT_CA_ISSUED: ${{ vars.MCPB_CERT_CA_ISSUED }}
 
       # Two names for one file: the versioned one for the record, and
       # lastping.mcpb, which releases/latest/download/lastping.mcpb resolves
-      # to, so the download link on lastping.dev never changes.
+      # to, so the download link on lastping.dev never changes. Then publish
+      # the draft; a prerelease is published without becoming latest.
       - run: |
           v="${GITHUB_REF_NAME#v}"
-          gh release upload "$GITHUB_REF_NAME" \
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
             "dist/mcpb/lastping-$v.mcpb" dist/mcpb/lastping.mcpb --clobber
+          if [[ "$v" == *-* ]]; then
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+          else
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

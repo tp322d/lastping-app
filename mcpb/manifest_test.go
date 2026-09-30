@@ -2,6 +2,7 @@ package mcpb_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -62,14 +63,44 @@ func TestManifest_KeyIsSensitiveAndOnlyInEnv(t *testing.T) {
 	if m.Server.MCPConfig.Env["LASTPING_API_KEY"] != "${user_config.api_key}" {
 		t.Fatalf("LASTPING_API_KEY must come from user_config.api_key")
 	}
-	if b, _ := json.Marshal(m.Server.MCPConfig.Args); strings.Contains(string(b), "user_config") {
-		t.Fatalf("mcp_config.args passes user_config")
+	// Walk the whole server object (command, args, env, every platform
+	// override): the key reference must appear exactly once, at
+	// mcp_config.env.LASTPING_API_KEY, so no command, argument, override or
+	// second variable can carry it.
+	var raw struct {
+		Server any `json:"server"`
 	}
-	for platform, o := range m.Server.MCPConfig.PlatformOverrides {
-		b, _ := json.Marshal(o["args"])
-		if strings.Contains(string(b), "user_config") {
-			t.Fatalf("%s override passes user_config in args", platform)
+	b, err := os.ReadFile("manifest.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatal(err)
+	}
+	var found []string
+	var walk func(path string, v any)
+	walk = func(path string, v any) {
+		switch x := v.(type) {
+		case map[string]any:
+			for k, e := range x {
+				if strings.Contains(k, "user_config") {
+					found = append(found, path+" (key "+k+")")
+				}
+				walk(path+"."+k, e)
+			}
+		case []any:
+			for i, e := range x {
+				walk(fmt.Sprintf("%s[%d]", path, i), e)
+			}
+		case string:
+			if strings.Contains(x, "user_config") {
+				found = append(found, path)
+			}
 		}
+	}
+	walk("server", raw.Server)
+	if len(found) != 1 || found[0] != "server.mcp_config.env.LASTPING_API_KEY" {
+		t.Fatalf("user_config must appear in server only at mcp_config.env.LASTPING_API_KEY, found at %v", found)
 	}
 	if m.Server.Type != "binary" || len(m.PrivacyPolicies) == 0 {
 		t.Fatalf("server.type binary and a privacy policy are required")

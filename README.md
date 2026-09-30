@@ -101,7 +101,8 @@ key in the system keychain. It needs no Node.js. From the next release:
    [app.lastping.dev](https://app.lastping.dev).
 
 The extension runs this repository's stdio binary (below) on your computer.
-It is built and signed by `mcpb/build.sh` when a version is tagged.
+It is built by `mcpb/build.sh` when a version is tagged, and signed when a
+signing certificate is configured.
 
 ### Claude Desktop through the mcp-remote bridge
 

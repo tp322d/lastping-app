@@ -70,6 +70,8 @@ changelog:
       - '^test:'
       - '^chore:'
 
+# A draft: the mcpb job in release.yml attaches the Claude Desktop extension
+# and then publishes it, so a release never becomes latest without it.
 release:
-  draft: false
+  draft: true
   prerelease: auto
