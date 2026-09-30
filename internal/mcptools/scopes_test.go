@@ -181,3 +181,17 @@ func TestScopeSentence_IsEmptyForAnUnknownTool(t *testing.T) {
 	require.Empty(t, scopeSentence(""))
 	require.Equal(t, "Requires an API key with the admin scope or higher.", scopeSentence("admin"))
 }
+
+// TestRequiredScope_MatchesTheTable pins the exported lookup to the table it
+// reads, row by row, and pins the unknown-tool answer to ("", false).
+func TestRequiredScope_MatchesTheTable(t *testing.T) {
+	require.NotEmpty(t, toolScopes)
+	for name, want := range toolScopes {
+		got, ok := RequiredScope(name)
+		require.True(t, ok, name)
+		require.Equal(t, want, got, name)
+	}
+	got, ok := RequiredScope("no_such_tool")
+	require.False(t, ok)
+	require.Equal(t, "", got)
+}
