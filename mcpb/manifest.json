@@ -1,0 +1,52 @@
+{
+  "manifest_version": "0.3",
+  "name": "lastping",
+  "display_name": "LastPing",
+  "version": "0.0.0",
+  "description": "Dead-man's-switch monitoring for cron jobs, CI/CD and AI agents: create monitors, read incidents and wire up check-ins from Claude.",
+  "long_description": "Most monitoring watches a thing and tells you when it looks wrong. LastPing waits for a thing to check in and tells you when it doesn't. A job that breaks can't send you an error, but it can fail to send you anything, and absence is the one signal a broken process can still produce.\n\nThis extension runs the LastPing MCP server on your computer. It carries the same tool set as the hosted server at mcp.lastping.dev, and calls the LastPing API with the key you enter at install. Claude Desktop keeps that key in your system keychain.",
+  "author": {
+    "name": "LastPing",
+    "email": "hello@lastping.dev",
+    "url": "https://lastping.dev"
+  },
+  "homepage": "https://lastping.dev",
+  "documentation": "https://lastping.dev/mcp/",
+  "support": "mailto:hello@lastping.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tp322d/lastping-app"
+  },
+  "license": "MIT",
+  "icon": "icon.png",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/lastping-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/server/lastping-mcp",
+      "args": [],
+      "env": {
+        "LASTPING_API_KEY": "${user_config.api_key}"
+      },
+      "platform_overrides": {
+        "win32": {
+          "command": "${__dirname}/server/lastping-mcp.exe"
+        }
+      }
+    }
+  },
+  "tools_generated": true,
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "LastPing API key",
+      "description": "A write-scope key from Settings, API keys. It is stored in your system keychain.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32"]
+  },
+  "privacy_policies": ["https://lastping.dev/privacy/"]
+}

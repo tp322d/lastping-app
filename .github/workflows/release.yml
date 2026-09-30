@@ -35,3 +35,39 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The Claude Desktop extension. It waits for goreleaser because that job
+  # creates the release the bundle is uploaded to. build.sh exits 1 when the
+  # signing secrets are missing, so a tag without them publishes no bundle.
+  mcpb:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: bash mcpb/build.sh "$GITHUB_REF_NAME"
+        env:
+          MCPB_SIGNING_CERT: ${{ secrets.MCPB_SIGNING_CERT }}
+          MCPB_SIGNING_KEY: ${{ secrets.MCPB_SIGNING_KEY }}
+          # Set this repository variable to 1 only if the owner chose a
+          # self-signed certificate; see mcpb/build.sh.
+          MCPB_ALLOW_UNTRUSTED_CERT: ${{ vars.MCPB_ALLOW_UNTRUSTED_CERT }}
+
+      # Two names for one file: the versioned one for the record, and
+      # lastping.mcpb, which releases/latest/download/lastping.mcpb resolves
+      # to, so the download link on lastping.dev never changes.
+      - run: |
+          v="${GITHUB_REF_NAME#v}"
+          gh release upload "$GITHUB_REF_NAME" \
+            "dist/mcpb/lastping-$v.mcpb" dist/mcpb/lastping.mcpb --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
