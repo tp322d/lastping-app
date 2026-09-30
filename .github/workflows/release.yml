@@ -42,10 +42,11 @@ jobs:
   # whose bundle fails to build leaves a draft and never breaks the
   # releases/latest/download/lastping.mcpb link on lastping.dev.
   #
-  # Signing is optional: without the two secrets build.sh ships an unsigned
-  # bundle and says so in the log. Set the repository variable
-  # MCPB_CERT_CA_ISSUED to 1 only for a certificate from a public CA; the
-  # build then also checks its chain against the runner's CA store.
+  # A release is always signed: MCPB_REQUIRE_SIGNATURE makes build.sh fail
+  # before building anything when the two signing secrets are missing. The
+  # certificate is self-signed. Set the repository variable
+  # MCPB_CERT_CA_ISSUED to 1 only for a future certificate from a public CA;
+  # the build then also checks its chain against the runner's CA store.
   mcpb:
     needs: goreleaser
     runs-on: ubuntu-latest
@@ -69,6 +70,7 @@ jobs:
           MCPB_SIGNING_CERT: ${{ secrets.MCPB_SIGNING_CERT }}
           MCPB_SIGNING_KEY: ${{ secrets.MCPB_SIGNING_KEY }}
           MCPB_CERT_CA_ISSUED: ${{ vars.MCPB_CERT_CA_ISSUED }}
+          MCPB_REQUIRE_SIGNATURE: "1"
 
       # Two names for one file: the versioned one for the record, and
       # lastping.mcpb, which releases/latest/download/lastping.mcpb resolves

@@ -101,8 +101,13 @@ key in the system keychain. It needs no Node.js. From the next release:
    [app.lastping.dev](https://app.lastping.dev).
 
 The extension runs this repository's stdio binary (below) on your computer.
-It is built by `mcpb/build.sh` when a version is tagged, and signed when a
-signing certificate is configured.
+It is built by `mcpb/build.sh` when a version is tagged, and every release is
+signed; the release build fails rather than ship an unsigned bundle. The
+certificate is self-signed, so Claude Desktop shows the extension as
+unverified. The signature still proves the bundle came from this repository's
+release pipeline and was not altered after it was signed. A local build of
+`mcpb/build.sh` without the signing secrets is unsigned and says so.
+`MCPB_CERT_CA_ISSUED` is kept for a future certificate from a public CA.
 
 ### Claude Desktop through the mcp-remote bridge
 

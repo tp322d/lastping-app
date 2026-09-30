@@ -6,14 +6,24 @@
 #   mcpb/build.sh v0.2.0                                   # unsigned
 #   MCPB_SIGNING_CERT='<PEM>' MCPB_SIGNING_KEY='<PEM>' mcpb/build.sh v0.2.0
 #
-# Signing is optional. With neither secret set the bundle is built unsigned
-# and the script says so. With both set it is signed, and the build fails
-# unless the signature verifies:
+# Releases are signed; local builds may be unsigned. The release workflow sets
+# MCPB_REQUIRE_SIGNATURE=1, and then the script exits 1 before building
+# anything unless both secrets are set. Without that variable, and with
+# neither secret set, the bundle is built unsigned and the script says so.
+#
+# The release certificate is self-signed. Claude Desktop shows the extension
+# as unverified, because no CA vouches for the certificate; the signature
+# still proves the bundle came from the release pipeline and was not altered
+# after it was signed.
+#
+# With both secrets set the bundle is signed, and the build fails unless the
+# signature verifies:
 #   - the key must belong to the first certificate in MCPB_SIGNING_CERT;
 #   - openssl must verify the PKCS#7 signature over the bundle's zip bytes,
 #     and the signer must be that certificate.
-# Those checks do not ask whether anyone trusts the certificate. Set
-# MCPB_CERT_CA_ISSUED=1 for a certificate issued by a public CA, and the build
+# Those checks do not ask whether anyone trusts the certificate, which is
+# right for the self-signed one. MCPB_CERT_CA_ISSUED stays for a future
+# certificate issued by a public CA: set it to 1 for one, and the build
 # also verifies the chain against the system CA store (MCPB_CA_PATH, default
 # /etc/ssl/certs) and requires the Code Signing extended key usage.
 #
@@ -40,6 +50,10 @@ if [[ -n "${MCPB_SIGNING_CERT:-}" && -n "${MCPB_SIGNING_KEY:-}" ]]; then
   sign=1
 elif [[ -n "${MCPB_SIGNING_CERT:-}" || -n "${MCPB_SIGNING_KEY:-}" ]]; then
   echo "error: set both MCPB_SIGNING_CERT and MCPB_SIGNING_KEY to sign, or neither to build unsigned" >&2
+  exit 1
+fi
+if (( ! sign )) && [[ "${MCPB_REQUIRE_SIGNATURE:-}" == "1" ]]; then
+  echo "error: MCPB_REQUIRE_SIGNATURE=1 but MCPB_SIGNING_CERT and MCPB_SIGNING_KEY are not set; a release never ships an unsigned bundle" >&2
   exit 1
 fi
 
