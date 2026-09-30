@@ -90,6 +90,27 @@ authenticate a ping; the ping URL stays unauthenticated by design, as above.
 
 ## MCP server — let an agent set up its own monitoring
 
+### Claude Desktop extension
+
+A one-click install for Claude Desktop on macOS and Windows that keeps your
+key in the system keychain. It needs no Node.js. From the next release:
+
+1. Download [lastping.mcpb](https://github.com/tp322d/lastping-app/releases/latest/download/lastping.mcpb).
+2. Double-click it; Claude Desktop opens its install dialog.
+3. Paste a write-scope key from Settings, API keys at
+   [app.lastping.dev](https://app.lastping.dev).
+
+The extension runs this repository's stdio binary (below) on your computer.
+It is built by `mcpb/build.sh` when a version is tagged, and every release is
+signed; the release build fails rather than ship an unsigned bundle. The
+certificate is self-signed, so Claude Desktop shows the extension as
+unverified. The signature still proves the bundle came from this repository's
+release pipeline and was not altered after it was signed. A local build of
+`mcpb/build.sh` without the signing secrets is unsigned and says so.
+`MCPB_CERT_CA_ISSUED` is kept for a future certificate from a public CA.
+
+### Claude Desktop through the mcp-remote bridge
+
 Claude Desktop's config file runs local programs only, so LastPing connects
 through the mcp-remote bridge. Add this to `claude_desktop_config.json`
 (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`):
@@ -123,6 +144,8 @@ through the mcp-remote bridge. Add this to `claude_desktop_config.json`
 - Adding LastPing as a custom connector (Settings, Connectors, Add custom
   connector) needs a sign-in LastPing does not offer yet, so the bridge above
   is the way for now. Cowork uses the same Desktop entry.
+
+### Other clients
 
 Claude Code connects directly, no bridge:
 `claude mcp add --transport http --scope user lastping https://mcp.lastping.dev/mcp --header "Authorization: Bearer <key>"`.

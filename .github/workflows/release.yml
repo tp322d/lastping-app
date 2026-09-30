@@ -35,3 +35,55 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The Claude Desktop extension. goreleaser creates the release as a draft,
+  # so nothing is public, and releases/latest still names the previous
+  # release, until this job has attached the bundle and published it. A tag
+  # whose bundle fails to build leaves a draft and never breaks the
+  # releases/latest/download/lastping.mcpb link on lastping.dev.
+  #
+  # A release is always signed: MCPB_REQUIRE_SIGNATURE makes build.sh fail
+  # before building anything when the two signing secrets are missing. The
+  # certificate is self-signed. Set the repository variable
+  # MCPB_CERT_CA_ISSUED to 1 only for a future certificate from a public CA;
+  # the build then also checks its chain against the runner's CA store.
+  mcpb:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The token stays out of .git/config while downloaded build tools run.
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: bash mcpb/build.sh "$GITHUB_REF_NAME"
+        env:
+          MCPB_SIGNING_CERT: ${{ secrets.MCPB_SIGNING_CERT }}
+          MCPB_SIGNING_KEY: ${{ secrets.MCPB_SIGNING_KEY }}
+          MCPB_CERT_CA_ISSUED: ${{ vars.MCPB_CERT_CA_ISSUED }}
+          MCPB_REQUIRE_SIGNATURE: "1"
+
+      # Two names for one file: the versioned one for the record, and
+      # lastping.mcpb, which releases/latest/download/lastping.mcpb resolves
+      # to, so the download link on lastping.dev never changes. Then publish
+      # the draft; a prerelease is published without becoming latest.
+      - run: |
+          v="${GITHUB_REF_NAME#v}"
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            "dist/mcpb/lastping-$v.mcpb" dist/mcpb/lastping.mcpb --clobber
+          if [[ "$v" == *-* ]]; then
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+          else
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
