@@ -50,7 +50,7 @@ const (
 
 	// Description is one sentence, matching the registry manifest exactly.
 	// The em dash is intentional.
-	Description = "Monitoring that agents set up for themselves — cron jobs, CI/CD pipelines and AI agent runs."
+	Description = "Monitoring that agents set up for themselves: cron jobs, CI/CD pipelines and AI agent runs."
 
 	// WebsiteURL points at /agents/ rather than the apex: someone reaching for
 	// a server's website from inside an MCP client wants the page about using

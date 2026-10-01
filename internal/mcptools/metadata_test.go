@@ -95,7 +95,7 @@ func TestMetadata_MatchesPublishedIdentity(t *testing.T) {
 	require.Equal(t, "lastping-mcp", ServerName)
 	require.Equal(t, "LastPing", Title)
 	require.Equal(t,
-		"Monitoring that agents set up for themselves — cron jobs, CI/CD pipelines and AI agent runs.",
+		"Monitoring that agents set up for themselves: cron jobs, CI/CD pipelines and AI agent runs.",
 		Description,
 		"this sentence is also in server.json and in the hosted server's constants; change all three together")
 	require.Equal(t, "https://lastping.dev/agents/", WebsiteURL)
