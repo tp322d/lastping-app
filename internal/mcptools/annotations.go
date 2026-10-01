@@ -175,6 +175,65 @@ var toolAnnotations = map[string]mcp.ToolAnnotation{
 	"snooze_monitor":              writes(false, true),
 }
 
+// toolTitles is each tool's display name: what Claude and other hosts show a
+// person in the tool list and in a confirmation prompt, where the snake_case
+// name reads as an identifier. Sentence case, at most 40 characters, no em
+// dashes, and never a promise the tool does not keep: create_monitor says it
+// may update, because it upserts by slug. TestDirectory_EveryToolIsListable
+// fails on a registered tool without a row here.
+var toolTitles = map[string]string{
+	"add_incident_note":           "Add incident note",
+	"adopt_discovered_agent":      "Adopt discovered trace source",
+	"create_api_key":              "Create API key",
+	"create_destination":          "Create alert destination",
+	"create_ingest_key":           "Create tracing key",
+	"create_monitor":              "Create or update monitor",
+	"create_status_page":          "Create status page",
+	"declare_run_expectations":    "Declare run expectations",
+	"delete_agent":                "Delete agent",
+	"delete_destination":          "Delete alert destination",
+	"delete_monitor":              "Delete monitor",
+	"delete_route":                "Delete alert route",
+	"delete_status_page":          "Delete status page",
+	"discover_monitors_reconcile": "Reconcile discovered jobs as monitors",
+	"export_terraform":            "Export Terraform configuration",
+	"get_agent":                   "Get agent details",
+	"get_agent_dependencies":      "Get one agent's dependencies",
+	"get_agent_usage":             "Get agent model usage",
+	"get_alert_templates":         "Get alert templates",
+	"get_incident":                "Get incident timeline",
+	"get_monitor":                 "Get monitor details",
+	"get_ping_instructions":       "Get ping instructions",
+	"get_run":                     "Get run details",
+	"get_run_history":             "Get run history",
+	"get_trace_diagnostics":       "Get trace diagnostics",
+	"get_trace_setup":             "Get tracing setup steps",
+	"list_agents":                 "List agents",
+	"list_api_keys":               "List API keys",
+	"list_deliveries":             "List alert deliveries",
+	"list_dependencies":           "List project dependencies",
+	"list_destinations":           "List alert destinations",
+	"list_discovered_agents":      "List discovered trace sources",
+	"list_incidents":              "List monitor incidents",
+	"list_monitors":               "List monitors",
+	"list_open_incidents":         "List open incidents",
+	"list_runs":                   "List runs",
+	"list_status_pages":           "List status pages",
+	"pause_monitor":               "Pause monitor",
+	"regenerate_api_key":          "Regenerate API key",
+	"register_agent":              "Register agent",
+	"resume_monitor":              "Resume monitor",
+	"revoke_api_key":              "Revoke API key",
+	"set_alert_template":          "Set alert template",
+	"set_route":                   "Set alert route",
+	"snooze_monitor":              "Set or clear maintenance window",
+	"test_destination":            "Test alert destination",
+	"update_agent":                "Update agent",
+	"update_destination":          "Update alert destination",
+	"update_monitor":              "Update monitor",
+	"update_status_page":          "Update status page",
+}
+
 // testDestinationAnnotation is the one tool that reaches outside LastPing.
 //
 // Every other tool talks only to the LastPing API — a closed domain scoped to
@@ -208,6 +267,15 @@ func newTool(name string, opts ...mcp.ToolOption) mcp.Tool {
 		opts = append([]mcp.ToolOption{mcp.WithToolAnnotation(ann)}, opts...)
 	}
 	t := mcp.NewTool(name, opts...)
+	// The title is set on both fields after construction, because
+	// mcp.WithToolAnnotation replaces the whole annotation struct: set as an
+	// option, Annotations.Title would be wiped by the table's row. The spec
+	// says a client prefers Tool.Title and falls back to Annotations.Title,
+	// and older clients read only the latter, so both carry it.
+	if title := toolTitles[name]; title != "" {
+		t.Title = title
+		t.Annotations.Title = title
+	}
 	// The required scope (scopes.go) is PREPENDED to the description rather
 	// than passed as another option, because mcp.WithDescription assigns
 	// rather than appends and the per-tool text is written at the call site.

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -25,7 +26,7 @@ func NewAPIClient(baseURL, apiKey string) *APIClient {
 }
 
 // problem reads an RFC 7807 Problem response and returns a human-readable error.
-// If the body cannot be decoded it falls back to the HTTP status text.
+// If the body cannot be decoded it falls back to undecodableProblem.
 //
 // max_scope and required_scope are the API's scope-refusal extension members,
 // and they are FOLDED into the sentence rather than dropped. This error string
@@ -79,21 +80,49 @@ func (c *APIClient) problemDetail(resp *http.Response) (problemInfo, error) {
 		MaxExpiresAt  string `json:"max_expires_at"`
 		MaxScope      string `json:"max_scope"`
 		RequiredScope string `json:"required_scope"`
+		Fix           string `json:"fix"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
-		return problemInfo{}, fmt.Errorf("HTTP %d", resp.StatusCode)
+		return problemInfo{}, undecodableProblem(resp.StatusCode)
 	}
 	info := problemInfo{Detail: p.Detail, MaxExpiresAt: p.MaxExpiresAt, MaxScope: p.MaxScope, RequiredScope: p.RequiredScope}
 	if p.Detail != "" {
 		if p.MaxScope != "" {
-			return info, fmt.Errorf("%s (HTTP %d): %s (max_scope: %s)", p.Title, p.Status, p.Detail, p.MaxScope)
+			return info, fmt.Errorf("%s (HTTP %d): %s (max_scope: %s)%s", p.Title, p.Status, p.Detail, p.MaxScope, fixSuffix(p.Detail, p.Fix))
 		}
 		if p.RequiredScope != "" {
-			return info, fmt.Errorf("%s (HTTP %d): %s (required_scope: %s)", p.Title, p.Status, p.Detail, p.RequiredScope)
+			return info, fmt.Errorf("%s (HTTP %d): %s (required_scope: %s)%s", p.Title, p.Status, p.Detail, p.RequiredScope, fixSuffix(p.Detail, p.Fix))
 		}
-		return info, fmt.Errorf("%s (HTTP %d): %s", p.Title, p.Status, p.Detail)
+		return info, fmt.Errorf("%s (HTTP %d): %s%s", p.Title, p.Status, p.Detail, fixSuffix(p.Detail, p.Fix))
 	}
-	return info, fmt.Errorf("%s (HTTP %d)", p.Title, p.Status)
+	return info, fmt.Errorf("%s (HTTP %d)%s", p.Title, p.Status, fixSuffix(p.Detail, p.Fix))
+}
+
+// fixSuffix is the problem's `fix` member as it is appended to the error
+// string: " Fix: <fix>", or an empty string when there is none. The fix is
+// the one sentence that says what to do next (reconnect with write access,
+// use an API key for this route), and the error string is the only thing
+// that reaches the agent's tool result, so dropping it leaves the agent told
+// it was refused and nothing about the way out. It is skipped when the
+// detail already carries the same text, so the agent never reads it twice.
+func fixSuffix(detail, fix string) string {
+	fix = strings.TrimSpace(fix)
+	if fix == "" || strings.Contains(detail, fix) {
+		return ""
+	}
+	return " Fix: " + fix
+}
+
+// undecodableProblem is the error for a response whose body is not a
+// problem document: a proxy's HTML page, an empty body, a truncated reply.
+// A bare "HTTP 502" tells an agent nothing it can act on, and the connector
+// directory rejects bare status messages, so the sentence says what happened
+// and, for a server error, what to do about it.
+func undecodableProblem(status int) error {
+	if status >= 500 {
+		return fmt.Errorf("LastPing API returned HTTP %d with no details; try again in a minute", status)
+	}
+	return fmt.Errorf("LastPing API refused the request (HTTP %d)", status)
 }
 
 // auth adds the Authorization header to a request.

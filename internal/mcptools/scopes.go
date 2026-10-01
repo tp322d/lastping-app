@@ -92,3 +92,11 @@ func scopeSentence(scope string) string {
 	}
 	return "Requires an API key with the " + scope + " scope or higher."
 }
+
+// RequiredScope reports the minimum scope a tool needs, read off toolScopes:
+// "read", "write" or "admin", and false for a tool this package does not
+// register.
+func RequiredScope(tool string) (string, bool) {
+	scope, ok := toolScopes[tool]
+	return scope, ok
+}
