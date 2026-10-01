@@ -27,13 +27,16 @@ const (
 	defaultAPIBase  = "https://app.lastping.dev"
 	defaultPingHost = "https://ping.lastping.dev"
 	defaultPort     = "8080"
-	version         = "0.1.1"
 
 	// bearerRatePerMin caps requests per API key per minute — a generous ceiling
 	// for interactive agent use; abusive callers get 429 + Retry-After.
 	bearerRatePerMin = 120
 	rateLimitSlots   = 4096
 )
+
+// version is the release version, set at build time with
+// -ldflags "-X main.version=<version>". An unstamped build reports "dev".
+var version = "dev"
 
 func main() {
 	// `-healthcheck` dials the local /healthz and exits 0/1 — used by the

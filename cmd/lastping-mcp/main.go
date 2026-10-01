@@ -13,8 +13,11 @@ import (
 const (
 	defaultBaseURL  = "https://app.lastping.dev"
 	defaultPingHost = "https://ping.lastping.dev"
-	version         = "0.1.1"
 )
+
+// version is the release version, set at build time with
+// -ldflags "-X main.version=<version>". An unstamped build reports "dev".
+var version = "dev"
 
 func main() {
 	apiKey := os.Getenv("LASTPING_API_KEY")

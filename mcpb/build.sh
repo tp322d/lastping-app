@@ -93,10 +93,12 @@ if (( sign )); then
   fi
 fi
 
+# The binary reports the same version the manifest carries: both come from
+# $version, which is the tag without its leading v.
 build() {
   local goos="$1" goarch="$2" dst="$3"
   (cd "$root" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-    go build -trimpath -ldflags '-s -w' -o "$dst" ./cmd/lastping-mcp)
+    go build -trimpath -ldflags "-s -w -X main.version=$version" -o "$dst" ./cmd/lastping-mcp)
 }
 
 # A binary server has no shell to pick an architecture at launch, so macOS
