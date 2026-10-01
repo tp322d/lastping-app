@@ -27,17 +27,24 @@ Claude Code: `claude mcp add --transport http --scope user lastping https://mcp.
 | `LP_MCP_PORT` | `8080` | listen port |
 | `LP_PING_HOST` | `https://ping.lastping.dev` | ping host for `get_ping_instructions` |
 
-`GET /healthz` → 200 (ALB health check). The MCP endpoint is at `/`, behind
-bearer auth (missing/invalid → 401) and a per-token rate limit (429).
+`GET /healthz` → 200 (for a load balancer or orchestrator health check). The
+MCP endpoint is at `/`, behind bearer auth (missing/invalid → 401) and a
+per-token rate limit (429).
 
-## Deploy
+## Run it yourself
 
-Built + shipped by the normal pipeline: `deploy.yml` builds
-`cmd/lastping-mcp-server/Dockerfile` into the `lastping-prod-mcp` ECR repo, and
-`infra/terraform/mcp.tf` runs it as a dedicated Fargate service behind the ALB
-(host `mcp.lastping.dev`). `run -healthcheck` is the container health probe.
+The same server runs hosted at `mcp.lastping.dev`; you only need to run it if
+you want your own endpoint. Build the container image from the repository root:
 
-## Local / e2e
+```sh
+docker build -f cmd/lastping-mcp-server/Dockerfile -t lastping-mcp-server .
+docker run -p 8080:8080 lastping-mcp-server
+```
 
-`docker compose up mcp` runs it against the in-network `api`; the protocol is
-exercised end-to-end in `test/e2e/mcp_remote_test.go`.
+or build the binary directly with
+`go build ./cmd/lastping-mcp-server`. Point `LP_API_BASE` at a different API
+only if you run one; by default it proxies to `https://app.lastping.dev`.
+
+The image is distroless, so it has no shell or curl for a health probe:
+`lastping-mcp-server -healthcheck` dials the local `/healthz` and exits 0 or 1,
+which is what a container health check should run.

@@ -9,10 +9,10 @@ import (
 )
 
 // tokenRateLimiter is a bounded LRU sliding-window limiter keyed by a hash of
-// the caller's bearer token. It mirrors the ingest hot-path limiter
-// (ingest/ratelimit.go): in-process state is correct for a single Fargate task
-// and degrades gracefully (per-task windows → effective cap × taskCount) if the
-// mcp service ever scales beyond one task — acceptable for abuse prevention.
+// the caller's bearer token. In-process state is correct for a single server
+// instance and degrades gracefully (per-instance windows → effective cap ×
+// instance count) if the server ever runs as more than one instance, which is
+// acceptable for abuse prevention.
 type tokenRateLimiter struct {
 	mu       sync.Mutex
 	maxSlots int
