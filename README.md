@@ -1,16 +1,27 @@
-<div align="center">
+<p align="center">
+  <a href="https://lastping.dev">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset=".github/hero-dark.svg">
+      <source media="(prefers-color-scheme: light)" srcset=".github/hero-light.svg">
+      <img alt="LastPing. A stopped agent looks exactly like a thinking one. Monitoring for AI agent runs, cron jobs and CI/CD. Free for individuals." src=".github/hero-light.svg" width="100%">
+    </picture>
+  </a>
+</p>
 
-<img src=".github/banner.svg" alt="LastPing" width="100%">
+<p align="center">
+  <a href="https://lastping.dev"><img alt="Website" src="https://img.shields.io/badge/Website-0f766e?style=for-the-badge"></a>
+  <a href="https://lastping.dev/mcp/"><img alt="MCP server docs" src="https://img.shields.io/badge/MCP%20server-2f3a49?style=for-the-badge"></a>
+  <a href="https://app.lastping.dev/docs"><img alt="API docs" src="https://img.shields.io/badge/API%20docs-2f3a49?style=for-the-badge"></a>
+  <a href="https://app.lastping.dev/status/lastping-self"><img alt="Status" src="https://img.shields.io/badge/Status-2f3a49?style=for-the-badge"></a>
+</p>
 
-
-[![MIT](https://img.shields.io/badge/license-MIT-0f766e)](LICENSE)
-[![Go](https://img.shields.io/badge/go-1.26-0f766e)](go.mod)
-[![Terraform](https://img.shields.io/badge/terraform-lastping--dev%2Flastping-0f766e)](https://registry.terraform.io/providers/lastping-dev/lastping/latest)
-[![Free](https://img.shields.io/badge/free_for_individuals-0f766e)](https://lastping.dev)
-
-</div>
-
----
+<p align="center">
+  <a href="https://github.com/tp322d/lastping-app/releases"><img alt="Release" src="https://img.shields.io/github/v/release/tp322d/lastping-app?color=2dd4bf"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/tp322d/lastping-app"></a>
+  <a href="go.mod"><img alt="Go 1.26" src="https://img.shields.io/badge/go-1.26-0f766e"></a>
+  <a href="https://registry.terraform.io/providers/lastping-dev/lastping/latest"><img alt="Terraform: lastping-dev/lastping" src="https://img.shields.io/badge/terraform-lastping--dev%2Flastping-0f766e"></a>
+  <a href="https://lastping.dev"><img alt="Free for individuals" src="https://img.shields.io/badge/free_for_individuals-0f766e"></a>
+</p>
 
 Most monitoring watches a thing and tells you when it looks wrong. LastPing
 waits for a thing to check in and tells you when it doesn't. That inversion is
@@ -18,9 +29,30 @@ the whole product: **a job that breaks can't send you an error, but it can fail
 to send you anything** — and absence is the one signal a broken process can
 still produce.
 
-This repository holds the open-source pieces: the `lastping` CLI and the MCP
-server. The hosted service they talk to is at **[lastping.dev](https://lastping.dev)**,
-free for individuals.
+This repository holds the open-source pieces: the `lastping` CLI, which wraps
+any command and reports its start, exit code and traces, and the MCP server,
+which lets an AI agent set up and read its own monitoring. The hosted service
+they talk to is at **[lastping.dev](https://lastping.dev)**, free for
+individuals.
+
+## Quick start
+
+```sh
+# 1. Install the CLI (macOS and Linux, amd64 and arm64)
+curl -fsSL https://raw.githubusercontent.com/tp322d/lastping-app/main/install.sh | sh
+
+# 2. Wrap a job: a start ping, your command untouched, then its exit code
+lastping run --monitor <monitor-id> -- ./backup.sh
+```
+
+```text
+# 3. Or give your AI assistant the hosted MCP server, and sign in
+https://mcp.lastping.dev/mcp
+```
+
+Create the monitor, and get its id, at [app.lastping.dev](https://app.lastping.dev),
+or let your assistant do it over MCP. Connect steps for each client are at
+[lastping.dev/mcp/](https://lastping.dev/mcp/#connect).
 
 ## Install
 
@@ -68,7 +100,7 @@ AI agent told to report on every task will stop doing it, and a cron line you
 meant to add a `curl` to never gets it. A wrapper reports from the process
 lifecycle, so nothing depends on anybody remembering.
 
-### Traces (ships with the next server release)
+### Traces
 
 `lastping run` always configures your wrapped command's OpenTelemetry
 exporter, in its environment only, so an auto-instrumented agent can export
@@ -93,7 +125,7 @@ authenticate a ping; the ping URL stays unauthenticated by design, as above.
 ### Claude Desktop extension
 
 A one-click install for Claude Desktop on macOS and Windows that keeps your
-key in the system keychain. It needs no Node.js. From the next release:
+key in the system keychain. It needs no Node.js.
 
 1. Download [lastping.mcpb](https://github.com/tp322d/lastping-app/releases/latest/download/lastping.mcpb).
 2. Double-click it; Claude Desktop opens its install dialog.
@@ -141,9 +173,10 @@ through the mcp-remote bridge. Add this to `claude_desktop_config.json`
   front of `PATH` in `env`.
 - Quit and reopen Claude Desktop; it reads the file only at start-up.
   Settings, Connectors then lists lastping.
-- Adding LastPing as a custom connector (Settings, Connectors, Add custom
-  connector) needs a sign-in LastPing does not offer yet, so the bridge above
-  is the way for now. Cowork uses the same Desktop entry.
+- Without a key, add LastPing as a custom connector instead (Customize,
+  Connectors, Add custom connector, then paste `https://mcp.lastping.dev/mcp`)
+  and sign in to LastPing in the browser. The same connector covers claude.ai,
+  the Claude mobile apps and Cowork.
 
 ### Other clients
 
@@ -153,9 +186,10 @@ Cursor, Windsurf, Codex CLI, Gemini CLI and other clients:
 [lastping.dev/mcp/#connect](https://lastping.dev/mcp/#connect).
 
 The hosted server is the recommended path, and it always carries the current
-tool set. Claude Code, Cursor, Windsurf, Codex CLI and Gemini CLI connect to it
-with a URL and an API key, with nothing to install. Claude Desktop needs one
-extra step: the mcp-remote bridge above, which needs Node.js.
+tool set. Most clients connect by adding the URL and signing in to LastPing,
+with nothing to install; Cursor and Windsurf use the URL and an API key. With a
+key, Claude Desktop connects through the extension or the mcp-remote bridge
+above.
 
 A stdio binary is also here if you would rather run it yourself:
 
@@ -190,8 +224,8 @@ The failure loop: `list_open_incidents` · `add_incident_note`
 
 Alert routing: `set_route` · `delete_route`
 
-Delivery log: `list_deliveries` (ships with the next server release) —
-recent alert deliveries across every monitor, no paging
+Delivery log: `list_deliveries`, recent alert deliveries across every
+monitor, no paging
 
 Destinations: `list_destinations` · `create_destination` ·
 `update_destination` · `test_destination` · `delete_destination`
@@ -243,14 +277,15 @@ run's pings and time it.
 curl -fsS -m 10 --retry 3 https://ping.lastping.dev/<monitor-id>
 ```
 
-### Traces (ships with the next server release)
+### Traces
 
 `POST https://ping.lastping.dev/v1/traces` accepts an OTLP/HTTP export
 (`application/x-protobuf` or `application/json`, gzip accepted) with a
 `Bearer` key (an `ingest` key bound to the monitor, from `create_ingest_key`;
 a write or admin key also works), or `POST <ping-url>/v1/traces` for exporters that
-cannot set headers. Spans need resource attributes `lastping.monitor_id` and
-`lastping.run_id` to be accepted; a payload is capped at 1 MiB decompressed,
+cannot set headers. Spans need the resource attribute `lastping.monitor_id`;
+with `lastping.run_id` they join that run, and without it each trace becomes a
+run of its own. A payload is capped at 1 MiB decompressed,
 500 spans per request and 2,000 spans per run. `lastping run` sets all of
 this up for you — see Traces above.
 
