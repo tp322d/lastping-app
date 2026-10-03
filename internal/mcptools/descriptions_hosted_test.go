@@ -28,6 +28,13 @@ func TestUpstreamCause_IsNamedWhereCausesAre(t *testing.T) {
 	assert.Contains(t, toolDescription(t, "list_runs"), "failure_cause is 'upstream'")
 }
 
+// TestAssertionCause_IsNamedInListRuns: the hosted server marks a run that
+// sent a success but failed an output assertion as failed, with failure_cause
+// 'assertion' and no upstream_error. list_runs has to say so in its words.
+func TestAssertionCause_IsNamedInListRuns(t *testing.T) {
+	assert.Contains(t, toolDescription(t, "list_runs"), "failure_cause is 'assertion' when the run sent a success but its output failed an output assertion")
+}
+
 // TestTraceDiagnostics_NamesTheDroppedOutcome: routine 202 drops now read
 // outcome dropped, not refused, and the description must tell them apart.
 func TestTraceDiagnostics_NamesTheDroppedOutcome(t *testing.T) {
