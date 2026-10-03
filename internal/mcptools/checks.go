@@ -30,6 +30,9 @@ type Check struct {
 	LastPingAt   *string  `json:"last_ping_at"`
 	DueAt        *string  `json:"due_at"`
 	Tags         []string `json:"tags"`
+	// Set together by discovery; both absent for a monitor a person made.
+	SourceKind string `json:"source_kind,omitempty"`
+	SourceRef  string `json:"source_ref,omitempty"`
 	// MaxRuntimeS mirrors the API DTO: a nil pointer means "unset", and the
 	// overrun deadline falls back to grace_s. Decoded so get_monitor and
 	// list_monitors show an agent the value it just wrote, rather than
