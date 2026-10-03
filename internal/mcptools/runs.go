@@ -98,7 +98,9 @@ func registerListRunsTool(s *server.MCPServer) {
 				"set-up's test span, in no count), and failure_cause with upstream_error: "+
 				"failure_cause is 'upstream' when the run ended on the model provider's API error, which pages only after 3 runs in a "+
 				"row (or the monitor's failure_threshold when higher), and upstream_error then names it (server_error, overloaded or "+
-				"rate_limit); both are empty otherwise. A Claude Code run whose hook is current holds its turns' traces (a prompt after "+
+				"rate_limit); failure_cause is 'assertion' when the run sent a success but its output failed an output assertion "+
+				"(one set on the monitor, or an expectation the run declared), so the run is failed, and upstream_error is then "+
+				"empty; both are empty otherwise. A Claude Code run whose hook is current holds its turns' traces (a prompt after "+
 				"an interrupt, or one answering a blocked turn, continues the open run, and that turn's trace normally joins it). "+
 				"outcome is succeeded, failed, cancelled, "+
 				"blocked, running or unfinished: unfinished is a run that started and never ended within its monitor's "+
