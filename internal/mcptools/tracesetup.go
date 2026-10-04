@@ -65,7 +65,7 @@ type TraceSetupFile struct {
 // traceSetupTools is the tool names the ?tool= parameter accepts, in the
 // server's order. The server validates it too; listing it here puts it in
 // the tool's schema, where an agent reads it before calling.
-var traceSetupTools = []string{"claude-code", "codex", "gemini", "cursor", "python", "node", "otel-sdk", "collector"}
+var traceSetupTools = []string{"claude-code", "codex", "gemini", "antigravity", "cursor", "python", "node", "otel-sdk", "collector"}
 
 func registerTraceSetupTools(s *server.MCPServer) {
 	s.AddTool(
@@ -89,7 +89,7 @@ func registerTraceSetupTools(s *server.MCPServer) {
 			mcp.WithString("monitor_id", mcp.Required(), mcp.Description("Monitor UUID (from create_monitor or list_monitors).")),
 			mcp.WithString("tool",
 				mcp.Enum(traceSetupTools...),
-				mcp.Description("Which tool will send the traces: claude-code, codex, gemini, cursor, python, node, otel-sdk or collector. Omit to get every block."))),
+				mcp.Description("Which tool will send the traces: claude-code, codex, gemini, antigravity, cursor, python, node, otel-sdk or collector. Omit to get every block."))),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
 			if err != nil {
