@@ -263,6 +263,7 @@ const wantGetPingInstructionsDesc = "" +
 	"translated install can pass its own verification while never reporting, so use `how_to` instead. " +
 	"If you ARE Codex, pass tool \"codex\": `hook_install` is then Codex's own install (a script and three hooks, SessionStart, UserPromptSubmit and Stop, in ~/.codex/hooks.json, " +
 	"trusted by the person in /hooks), and `how_to` says what Codex's sandbox does to pings you send yourself. " +
+	"If you ARE Antigravity CLI (agy), pass tool \"antigravity\": `hook_install` is then a script and three hooks in ~/.gemini/config/hooks.json that report each turn as a run. " +
 	"If what you are monitoring is launched as a command instead — a cron job, a CI step, a script, or an agent started from a shell — use " +
 	"`run_wrapper`: wrap the command with `lastping run` and a separate process reports for you, so nothing has to be remembered; the tradeoff is " +
 	"that it reports the process's own lifecycle (start, success, fail, cancel) and has no way to send blocked or note. " +
@@ -389,4 +390,20 @@ func TestGetPingInstructions_ToolIsSentAsHookTool(t *testing.T) {
 	require.False(t, callTool(t, s, c, "get_ping_instructions", map[string]interface{}{"id": "abc-123", "tool": "codex"}).IsError)
 	require.False(t, callTool(t, s, c, "get_ping_instructions", map[string]interface{}{"id": "abc-123"}).IsError)
 	assert.Equal(t, []string{"hook_tool=codex", ""}, queries)
+}
+
+func TestAntigravityIsAnEnumValueOfPingAndTraceTools(t *testing.T) {
+	s := newTestServer(t, "https://ping.lastping.dev")
+	for _, name := range []string{"get_ping_instructions", "get_trace_setup"} {
+		st, ok := s.ListTools()[name]
+		require.True(t, ok, "%s is not registered", name)
+		schema, ok := st.Tool.InputSchema.Properties["tool"].(map[string]any)
+		require.True(t, ok, "%s has no tool parameter", name)
+		if name == "get_ping_instructions" {
+			require.Equal(t, []string{"claude-code", "codex", "antigravity"}, schema["enum"])
+			continue
+		}
+		require.Contains(t, schema["enum"], "antigravity")
+		require.Contains(t, schema["description"], "gemini, antigravity, cursor")
+	}
 }

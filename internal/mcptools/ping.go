@@ -46,6 +46,7 @@ func registerPingTools(s *server.MCPServer, pingHost string) {
 				"translated install can pass its own verification while never reporting, so use `how_to` instead. "+
 				"If you ARE Codex, pass tool \"codex\": `hook_install` is then Codex's own install (a script and three hooks, SessionStart, UserPromptSubmit and Stop, in ~/.codex/hooks.json, "+
 				"trusted by the person in /hooks), and `how_to` says what Codex's sandbox does to pings you send yourself. "+
+				"If you ARE Antigravity CLI (agy), pass tool \"antigravity\": `hook_install` is then a script and three hooks in ~/.gemini/config/hooks.json that report each turn as a run. "+
 				"If what you are monitoring is launched as a command instead — a cron job, a CI step, a script, or an agent started from a shell — use "+
 				"`run_wrapper`: wrap the command with `lastping run` and a separate process reports for you, so nothing has to be remembered; the tradeoff is "+
 				"that it reports the process's own lifecycle (start, success, fail, cancel) and has no way to send blocked or note. "+
@@ -67,8 +68,8 @@ func registerPingTools(s *server.MCPServer, pingHost string) {
 				"id in the URL is itself the capability."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID (from create_monitor or list_monitors).")),
 			mcp.WithString("tool",
-				mcp.Enum("claude-code", "codex"),
-				mcp.Description("Which tool's install `hook_install` carries: claude-code (the default) or codex. Everything else in the result is the same."))),
+				mcp.Enum("claude-code", "codex", "antigravity"),
+				mcp.Description("Which tool's install `hook_install` carries: claude-code (the default), codex or antigravity. Everything else in the result is the same."))),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
 			if err != nil {
