@@ -303,6 +303,62 @@ func TestSnoozeMonitor_Duration(t *testing.T) {
 	assert.Equal(t, "1h", body["duration"])
 }
 
+// TestSnoozeMonitor_AnswerSaysWhatHappened: a clear=true call says the
+// window was cleared (it used to say "set"), and a set names the window's end
+// from the API's maintenance_until.
+func TestSnoozeMonitor_AnswerSaysWhatHappened(t *testing.T) {
+	var answer string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(answer))
+	}))
+	defer srv.Close()
+	c := mcptools.NewAPIClient(srv.URL, "test-key")
+	s := newTestServer(t, "https://ping.lastping.dev")
+
+	answer = `{"id":"abc-123","status":"up"}`
+	result := callTool(t, s, c, "snooze_monitor", map[string]interface{}{"id": "abc-123", "clear": true})
+	require.False(t, result.IsError, extractText(result))
+	assert.Equal(t, "Maintenance window cleared on monitor abc-123 (status=up).", extractText(result))
+
+	answer = `{"id":"abc-123","status":"up","maintenance_until":"2026-10-06T13:00:00Z"}`
+	result = callTool(t, s, c, "snooze_monitor", map[string]interface{}{"id": "abc-123", "duration": "1h"})
+	require.False(t, result.IsError, extractText(result))
+	assert.Equal(t, "Maintenance window set on monitor abc-123 until 2026-10-06T13:00:00Z (status=up).", extractText(result))
+}
+
+// TestSnoozeMonitor_RejectsMoreThanOneOf: the description says the tool takes
+// exactly one of duration, until or clear=true, so a call naming two is
+// refused before any request reaches the API (which would otherwise pick one
+// by precedence and drop the other without saying so).
+func TestSnoozeMonitor_RejectsMoreThanOneOf(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"abc-123","status":"up"}`))
+	}))
+	defer srv.Close()
+	c := mcptools.NewAPIClient(srv.URL, "test-key")
+	s := newTestServer(t, "https://ping.lastping.dev")
+
+	for _, args := range []map[string]interface{}{
+		{"id": "abc-123", "duration": "1h", "until": "2026-10-07T00:00:00Z"},
+		{"id": "abc-123", "duration": "1h", "clear": true},
+		{"id": "abc-123", "until": "2026-10-07T00:00:00Z", "clear": true},
+	} {
+		result := callTool(t, s, c, "snooze_monitor", args)
+		require.True(t, result.IsError, "%v", args)
+		assert.Contains(t, extractText(result), "exactly one of")
+	}
+	assert.Equal(t, 0, calls, "a call naming two of them must not reach the API")
+
+	// Positive companion: one of them, with clear=false alongside, is sent.
+	result := callTool(t, s, c, "snooze_monitor", map[string]interface{}{"id": "abc-123", "duration": "1h", "clear": false})
+	require.False(t, result.IsError, extractText(result))
+	assert.Equal(t, 1, calls)
+}
+
 // extractText returns the concatenated text from a CallToolResult.
 func extractText(r *mcp.CallToolResult) string {
 	var sb strings.Builder

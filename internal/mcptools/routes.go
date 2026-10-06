@@ -24,34 +24,20 @@ func registerRouteTools(s *server.MCPServer) {
 	registerDeleteRouteTool(s)
 	s.AddTool(
 		newTool("set_route",
-			mcp.WithDescription("Route a monitor's alerts for one event type to a set of destinations (channels). "+
-				"THIS REPLACES THE WHOLE SET for that event type — every destination you leave out stops receiving that event, including ones somebody else configured. "+
-				"CALL get_monitor FIRST and read its `routes` field: that is the monitor's current routing, and adding a destination means passing the existing ids PLUS the new one. "+
-				"Pass an empty channel_ids to remove all routing for the event. Destinations must be verified and "+
-				"enabled (email destinations must be confirmed first). Use list_destinations for IDs."),
+			mcp.WithDescription("Routes a monitor's alerts for one event type to a set of destinations (channels). "+
+				"Replaces the whole destination set for that event type: destinations not listed stop receiving it, including ones someone else configured. "+
+				"get_monitor's `routes` field holds the current set, so adding a destination means sending the existing ids plus the new one. "+
+				"An empty channel_ids removes all routing for the event. Destinations have to be verified and enabled (an email one confirmed). "+
+				"list_destinations returns the ids."),
 			mcp.WithString("monitor_id", mcp.Required(), mcp.Description("Monitor (check) UUID.")),
-			mcp.WithString("event_type", mcp.Required(), mcp.Description("One of eight: down (alert opened), recovery (alert cleared), "+
-				"fail (explicit failure ping), every-run (one notification per completed run, success or failure), "+
-				"success (fires only when a run completes successfully), started (fires when a run begins), "+
-				"blocked (an agent reported it is waiting on a human; held 10 minutes and sent only if that run is still blocked then, "+
-				"at most once per blocked stretch of a run: a note, step, success, fail or cancel for the same run inside the 10 minutes cancels it, a title does not; "+
-				"a blocked ping sent without a run id belongs to no run, so any non-blocked ping on the monitor ends its stretch: a start, log, note, success, fail or cancel of any run, or a step of the monitor's current run (any step when no run is current); "+
-				"this is separate from the 'blocked' INCIDENT that opens later only if the wait outlives blocked_timeout_s, "+
-				"see create_monitor/update_monitor), note (a free-form annotation ping — never itself opens or clears an incident). "+
-				"Prefer down/recovery/fail: they fire only on a state change. every-run, success, started, and note are not "+
-				"state changes and are bounded only by how often the monitor runs (or how often the agent chooses to send them), "+
-				"so they can be very chatty, and none of them is flap-damped. started is the chattiest of the bunch for CI-fed "+
-				"monitors: GitHub maps both the workflow_run 'requested' and 'in_progress' webhook events to a start signal, so a "+
-				"single CI run can emit more than one started event — this was observed in production, where a real run logged "+
-				"two starts seconds apart. every-run, success, started, and note share one separate per-channel rate cap "+
-				"(60/hour by default), so together they can no longer use up the budget that down/fail/recovery/blocked "+
-				"need — but a chatty route on any one of the four can silently suppress its own notifications, and "+
-				"its sibling informational types' notifications, once it exceeds that shared cap. blocked is deliberately NOT "+
-				"in that shared group even though it is agent-reported rather than system-derived: a blocked agent needs a human, "+
-				"so it draws on the protected down/fail/recovery budget instead, precisely so it cannot be starved by chatty "+
-				"every-run/success/started/note traffic. Route informational types to a low-stakes destination, not to the one "+
-				"that pages someone.")),
-			mcp.WithString("channel_ids", mcp.Description("Comma-separated destination (channel) UUIDs to notify. Empty string clears the route.")),
+			mcp.WithString("event_type", mcp.Required(), mcp.Description("down (incident opened), recovery (incident cleared), "+
+				"fail (failure ping), every-run (each completed run), success, started (GitHub's requested and in_progress each send one, so one CI run can notify twice), "+
+				"blocked (an agent awaits a human: held 10 minutes, cancelled by a ping or step of the same run in that time; sent once per blocked stretch; "+
+				"not the 'blocked' incident of blocked_timeout_s), note (an annotation). "+
+				"down, recovery and fail fire only on a state change. every-run, success, started and note share a separate per-channel rate cap "+
+				"(60/hour default) and are not flap-damped, so one chatty route can suppress the group; "+
+				"blocked draws on the protected down/fail/recovery budget.")),
+			mcp.WithString("channel_ids", mcp.Description("Comma-separated destination (channel) UUIDs to notify. An empty string clears the route.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -84,9 +70,8 @@ var routeEventTypes = []string{"down", "recovery", "fail", "every-run", "success
 func registerDeleteRouteTool(s *server.MCPServer) {
 	s.AddTool(
 		newTool("delete_route",
-			mcp.WithDescription("Stop routing ONE event type of a monitor to any destination: its alerts for that event go nowhere "+
-				"afterwards. Every other event type's routing on the monitor is left exactly as it was. To drop one destination but "+
-				"keep the rest for the same event type, call get_monitor and then set_route with the remaining ids instead. "+
+			mcp.WithDescription("Stops routing one event type of a monitor to any destination, so its alerts for that event go nowhere; "+
+				"every other event type's routing is unchanged. set_route with the remaining ids drops a single destination instead. "+
 				"An event type with no routing answers \"route not found\"."),
 			mcp.WithString("monitor_id", mcp.Required(), mcp.Description("Monitor (check) UUID.")),
 			mcp.WithString("event_type", mcp.Required(), mcp.Enum(routeEventTypes...),

@@ -15,8 +15,9 @@ import (
 	"github.com/tp322d/lastping-app/internal/mcptools"
 )
 
-// get_ping_instructions is a pure proxy: the payload (run_wrapper, hook_install,
-// how_to, reporting_options, the curl snippets) is assembled server-side by
+// get_ping_instructions is a proxy: the payload (run_wrapper, how_to,
+// reporting_options, the curl snippets, and hook_install when `tool` is set) is
+// assembled server-side by
 // GET /api/v1/checks/{id}/ping-instructions, never in this process. See ping.go's
 // doc comment for why: the assembly reaches into a private prompt-building
 // package this open-source binary must never carry. These tests therefore
@@ -113,7 +114,7 @@ func TestGetPingInstructions_ProxiesAPIResponseVerbatim(t *testing.T) {
 	c := mcptools.NewAPIClient(srv.URL, "test-key")
 	s := newTestServer(t, "https://ping.lastping.dev")
 
-	result := callTool(t, s, c, "get_ping_instructions", map[string]interface{}{"id": "abc-123"})
+	result := callTool(t, s, c, "get_ping_instructions", map[string]interface{}{"id": "abc-123", "tool": "claude-code"})
 	require.False(t, result.IsError, "expected success")
 
 	var served mcptools.PingInstructions
@@ -122,6 +123,8 @@ func TestGetPingInstructions_ProxiesAPIResponseVerbatim(t *testing.T) {
 	var got mcptools.PingInstructions
 	require.NoError(t, json.Unmarshal([]byte(resultText(t, result)), &got))
 
+	// docs_url is the one field this tool adds.
+	served.DocsURL = "https://lastping.dev/mcp/"
 	assert.Equal(t, served, got, "the tool must return exactly what the API served, not a rebuilt or partial copy")
 }
 
@@ -133,8 +136,9 @@ func TestGetPingInstructions_ProxiesAPIResponseVerbatim(t *testing.T) {
 // added to the API struct and not to this mirror, so the MCP server served a
 // payload missing the one field that drives adoption of the whole failure loop
 // -- no error, no warning, because a proxy that decodes into a struct simply
-// drops whatever the struct does not name. discovery_how_to is the same shape
-// of risk and is covered here from the day it was added.
+// drops whatever the struct does not name. The same risk applies to every other
+// field the struct mirrors; discovery_how_to is no longer one of them (the tool
+// drops it, see TestGetPingInstructions_OmitsDiscoveryHowTo).
 //
 // Unlike TestGetPingInstructions_ProxiesAPIResponseVerbatim, which decodes both
 // the fixture and the tool's output through mcptools.PingInstructions and so
@@ -156,7 +160,7 @@ func TestGetPingInstructions_IncludesEveryHowToField(t *testing.T) {
 	c := mcptools.NewAPIClient(srv.URL, "test-key")
 	s := newTestServer(t, "https://ping.lastping.dev")
 
-	result := callTool(t, s, c, "get_ping_instructions", map[string]interface{}{"id": "abc-123"})
+	result := callTool(t, s, c, "get_ping_instructions", map[string]interface{}{"id": "abc-123", "tool": "claude-code"})
 	require.False(t, result.IsError, "expected success")
 
 	var served map[string]interface{}
@@ -173,7 +177,6 @@ func TestGetPingInstructions_IncludesEveryHowToField(t *testing.T) {
 		"how_to_steps",
 		"expectations_how_to",
 		"failure_inbox_how_to",
-		"discovery_how_to",
 		"otel_traces_endpoint",
 		"otel_resource_attributes",
 		"otel_headers_hint",
@@ -191,8 +194,8 @@ func TestGetPingInstructions_IncludesEveryHowToField(t *testing.T) {
 //
 // The hosted MCP server and this binary are one product: an agent must get the
 // same guidance whichever it connects to, and the description is the only place
-// it learns that the payload carries expectations_how_to and discovery_how_to at
-// all. Nothing else in either repository compares the two strings, so a
+// it learns that the payload carries expectations_how_to, hook_install_note
+// and docs_url at all. Nothing else in either repository compares the two strings, so a
 // paraphrase on one side is invisible until an agent behaves differently
 // depending on which server it happened to reach. The literal below is a
 // deliberate second copy of the string in ping.go: a test that referenced the
@@ -231,11 +234,11 @@ func TestGetPingInstructions_DescriptionMatchesHostedServer(t *testing.T) {
 	assert.Equal(t, wantGetPingInstructionsDesc, got,
 		"get_ping_instructions' description has drifted from the hosted server's")
 
-	// Named explicitly, because these three are the whole reason the pin
-	// exists: each is a payload field an agent only discovers by reading the
+	// Named explicitly, because these are the whole reason the pin exists:
+	// each is a payload field an agent only discovers by reading the
 	// description, and each was added to the payload long after the first
 	// version of this description was written.
-	for _, mention := range []string{"expectations_how_to", "discovery_how_to", "reporting_options"} {
+	for _, mention := range []string{"expectations_how_to", "hook_install_note", "docs_url", "reporting_options"} {
 		assert.Contains(t, got, mention, "the description must still name %s", mention)
 	}
 }
@@ -247,42 +250,15 @@ const wantGetPingInstructionsDesc = "" +
 	// description (scopes.go), so the pin starts with it too. Dropping it here
 	// would make this test pass against a binary that stopped telling agents
 	// which credential the tool needs.
-	"Requires an API key with the read scope or higher. " +
-	"Get everything needed to make a monitor actually report: the ping URL, copy-paste check-in snippets, and the three " +
-	"MECHANISMS for reporting, returned together. Call this right after create_monitor. " +
-	"CHOOSE BY WHAT THE MONITORED THING IS — read `reporting_options` first and pick by that, rather than defaulting to the raw curl list: " +
-	"`how_to` — the manual protocol — is the UNIVERSAL path: it works in any agent, any language, any tool, with no prerequisite, so it is the " +
-	"default choice for any agent this applies to. Pair it with expect_every_s (the silence floor, set via update_monitor) so an agent that " +
-	"quietly stops reporting opens a detected incident instead of leaving its monitor reading healthy. " +
-	"If you ARE Claude Code specifically, `hook_install` is available as an OPTIONAL SHORTCUT, not a better tier: a one-time install that binds " +
-	"reporting to Claude Code's own hooks (UserPromptSubmit, Stop, StopFailure), automating how_to's exact same protocol so reporting becomes a " +
-	"property of your event loop instead of something you must remember — and it is the only mechanism that can send every state this product " +
-	"models, including blocked and note. Re-running hook_install replaces an older ~/.claude/lastping-report.sh (keeping a .bak), which is how an " +
-	"existing install is upgraded. hook_install is Claude Code specific: if you are a DIFFERENT AI agent — even one with its own hook or " +
-	"event system, Cursor, Windsurf, a custom framework — do NOT translate its steps into your own hooks; the event semantics differ and a " +
-	"translated install can pass its own verification while never reporting, so use `how_to` instead. " +
-	"If you ARE Codex, pass tool \"codex\": `hook_install` is then Codex's own install (a script and three hooks, SessionStart, UserPromptSubmit and Stop, in ~/.codex/hooks.json, " +
-	"trusted by the person in /hooks), and `how_to` says what Codex's sandbox does to pings you send yourself. " +
-	"If you ARE Antigravity CLI (agy), pass tool \"antigravity\": `hook_install` is then a script and three hooks in ~/.gemini/config/hooks.json that report each turn as a run. " +
-	"If what you are monitoring is launched as a command instead — a cron job, a CI step, a script, or an agent started from a shell — use " +
-	"`run_wrapper`: wrap the command with `lastping run` and a separate process reports for you, so nothing has to be remembered; the tradeoff is " +
-	"that it reports the process's own lifecycle (start, success, fail, cancel) and has no way to send blocked or note. " +
-	"Whichever you choose, the underlying protocol is the same: the success ping at the END of the work, the fail URL if it failed, " +
-	"the start ping first for long or possibly-hung runs (this enables overrun / never-finished detection), " +
-	"and a step (curl_step) as each stage completes so a run that wedges mid-way is caught by name rather than only when its whole budget expires. " +
-	"Also read `expectations_how_to`: before you start work, use declare_run_expectations to say how THIS run should be judged when it closes — " +
-	"a one-time, unchangeable commitment that replaces the run grading itself. " +
-	"And `discovery_how_to`, which is about the OTHER jobs on this host or in this repo: how to find the scheduled work nobody is watching yet " +
-	"and propose it, rather than monitoring only the one thing you were asked about. " +
-	"To send OpenTelemetry traces, read `tracing_how_to`, call get_trace_setup with the tool that sends the telemetry and carry " +
-	"its steps out yourself, except the tracing key: the person creates it on the monitor's Connect page and stores it from " +
-	"their own terminal, so you never create, ask for or hold it, and never use your own API key instead. " +
-	"`otel_env_lines` is the minimal form: the `export` lines (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL, " +
-	"OTEL_RESOURCE_ATTRIBUTES, OTEL_EXPORTER_OTLP_HEADERS) to set in the child process's environment so its spans arrive on this " +
-	"monitor; the person puts the tracing key in place of its placeholder, in their own terminal or file, never you (it is not " +
-	"resolved server-side). An exporter that cannot set " +
-	"headers can instead POST straight to `<ping_url>/v1/traces`: the monitor-URL form needs no Authorization header at all, since the monitor " +
-	"id in the URL is itself the capability."
+	"Requires the read scope or higher. " +
+	"Returns what a monitor needs in order to report: its ping URLs, copy-paste snippets (curl_success, curl_start, curl_fail, curl_step, run_example) " +
+	"and three reporting mechanisms, for wiring up a new monitor. `reporting_options` holds the rule for choosing between them: " +
+	"`how_to` is the manual protocol and works in any agent with no prerequisite (with expect_every_s, a lapse opens an incident); " +
+	"`hook_install` is a one-time install that automates the same protocol through hooks and alone sends every state, blocked and note included; " +
+	"it is returned only when `tool` is set (claude-code, codex or antigravity), otherwise `hook_install_note` says so; `run_wrapper` puts `lastping run` before a launched command (cron job, CI step, script) " +
+	"and reports start, success, fail and cancel. Also returned: `failure_inbox_how_to`, `expectations_how_to` (declare_run_expectations), " +
+	"`tracing_how_to` (OpenTelemetry, detailed by get_trace_setup), `otel_env_lines`, export lines whose key placeholder stands for the person's tracing key, and `docs_url`. " +
+	"An exporter that cannot set headers can POST to `<ping_url>/v1/traces`, which needs no Authorization header."
 
 // TestGetPingInstructions_PreservesLiteralAmpersandsAndPlaceholders guards the
 // HTML-escaping-off requirement (marshalSnippets): every URL in this payload
@@ -406,4 +382,58 @@ func TestAntigravityIsAnEnumValueOfPingAndTraceTools(t *testing.T) {
 		require.Contains(t, schema["enum"], "antigravity")
 		require.Contains(t, schema["description"], "gemini, antigravity, cursor")
 	}
+}
+
+// pingInstructionsFor serves pingInstructionsJSON through the real tool handler
+// and returns the decoded result plus the query the API received.
+func pingInstructionsFor(t *testing.T, args map[string]interface{}) (map[string]interface{}, string) {
+	t.Helper()
+	var query string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(pingInstructionsJSON))
+	}))
+	defer srv.Close()
+	c := mcptools.NewAPIClient(srv.URL, "test-key")
+	s := newTestServer(t, "https://ping.lastping.dev")
+	result := callTool(t, s, c, "get_ping_instructions", args)
+	require.False(t, result.IsError)
+	var got map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(resultText(t, result)), &got))
+	return got, query
+}
+
+func TestGetPingInstructions_NoToolOmitsHookInstallAndSaysWhy(t *testing.T) {
+	got, _ := pingInstructionsFor(t, map[string]interface{}{"id": "abc-123"})
+	assert.NotContains(t, got, "hook_install")
+	assert.Equal(t, "Returned when the tool argument names claude-code, codex or antigravity.", got["hook_install_note"])
+	// Positive companions: the rest of the payload is still there.
+	assert.Contains(t, got, "failure_inbox_how_to")
+	assert.Contains(t, got, "how_to")
+}
+
+func TestGetPingInstructions_ToolReturnsHookInstallWithoutNote(t *testing.T) {
+	for _, tool := range []string{"claude-code", "codex", "antigravity"} {
+		got, query := pingInstructionsFor(t, map[string]interface{}{"id": "abc-123", "tool": tool})
+		assert.Equal(t, "hook_tool="+tool, query)
+		assert.NotEmpty(t, got["hook_install"], tool)
+		assert.NotContains(t, got, "hook_install_note", tool)
+	}
+}
+
+func TestGetPingInstructions_OmitsDiscoveryHowTo(t *testing.T) {
+	for _, args := range []map[string]interface{}{
+		{"id": "abc-123"},
+		{"id": "abc-123", "tool": "claude-code"},
+	} {
+		got, _ := pingInstructionsFor(t, args)
+		assert.NotContains(t, got, "discovery_how_to")
+		assert.Contains(t, got, "failure_inbox_how_to", "the installed hook's standing instruction points at this field")
+	}
+}
+
+func TestGetPingInstructions_CarriesDocsURL(t *testing.T) {
+	got, _ := pingInstructionsFor(t, map[string]interface{}{"id": "abc-123"})
+	assert.Equal(t, "https://lastping.dev/mcp/", got["docs_url"])
 }

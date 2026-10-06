@@ -212,42 +212,38 @@ func TestCreateAPIKey_ForwardsCheckID(t *testing.T) {
 }
 
 // TestTraceSetupTools_DescribeTheCredentialRules. The descriptions are what
-// an agent reads before calling: they must carry the storage rules and the
+// an agent reads before calling: they state the facts about the key and the
 // scope each tool needs.
 func TestTraceSetupTools_DescribeTheCredentialRules(t *testing.T) {
 	s := newTestServer(t, "https://ping.lastping.dev")
 	tools := s.ListTools()
 	gts := tools["get_trace_setup"].Tool.Description
 	cik := tools["create_ingest_key"].Tool.Description
-	for _, want := range []string{"Requires an API key with the read scope", "Carry the steps out yourself", "Never echo the credential", "never put it in committed code"} {
+	// The descriptions state facts; the credential procedure (write the
+	// files, never echo or commit the key, never open ~/.codex/config.toml,
+	// the exit-6 other-monitor choice) is carried by the result's `prompt`.
+	for _, want := range []string{"Requires the read scope", "`prompt` is the full set-up procedure for the named tool, credential handling included",
+		"key_line", "the tracing key the person creates on the monitor's Connect page", "for Claude Code and Codex", "bang_script", "bang_command"} {
 		require.Contains(t, gts, want)
 	}
-	for _, want := range []string{"Requires an API key with the write scope", "nothing else", "git-ignored", "never echo it back", "never into committed code",
-		"Never use your own LastPing API key"} {
+	for _, want := range []string{"Requires the write scope", "and nothing else", "every REST call refuses it",
+		"For automation that stores the key itself (a CI secret, a deployment's secret store)",
+		"The plaintext key appears only in this result, which puts it in the conversation; the console's Create a tracing key keeps it out of chat"} {
 		require.Contains(t, cik, want)
 	}
-	// The agent never holds the tracing key; the person stores it from their
-	// own terminal with the block's key line.
-	for _, want := range []string{"You never create, ask for or hold the tracing key", "key_line", "never enters the chat", "bang_script", "bang_command",
-		"For Claude Code and Codex", "Never open, read or merge ~/.codex/config.toml yourself"} {
-		require.Contains(t, gts, want)
+	for _, old := range []string{"Carry the steps out yourself", "Never echo", "You never create", "Never open, read or merge"} {
+		require.NotContains(t, gts, old)
+		require.NotContains(t, cik, old)
 	}
 	require.NotContains(t, gts, "get the key with create_ingest_key")
-	require.Contains(t, gts, "removes the LastPing reporting block from ~/.claude/CLAUDE.md and from a ./CLAUDE.md outside a git repository, with backups")
-	require.Contains(t, gts, "one inside a git repository is left for the person to edit")
-	require.Contains(t, gts, "exits 6 naming that monitor; move tracing only after the person agrees, with LASTPING_REPLACE=1 before the command. If they keep the other monitor, stop there: no tracing key is stored for this one, "+
-		"and one already stored breaks the other monitor's tracing until its own key is stored again with its own key line. Codex's writes")
 	// No description sends an agent to mint the key a person's own machine
 	// traces with.
 	require.NotContains(t, cik, "This is the credential get_trace_setup's steps need")
-	require.Contains(t, cik, "not for a person's own machine")
 	pi := tools["get_ping_instructions"].Tool.Description
 	require.NotContains(t, pi, "the tracing key comes from create_ingest_key")
 	require.NotContains(t, pi, "fill in the tracing key placeholder yourself")
-	require.Contains(t, pi, "you never create, ask for or hold it")
+	require.Contains(t, pi, "export lines whose key placeholder stands for the person's tracing key")
 	require.NotContains(t, tools["get_trace_diagnostics"].Tool.Description, "expired: create_ingest_key")
-	require.Contains(t, cik, "The key is returned into this conversation. For a person's own machine, prefer the console's Create a tracing key "+
-		"and the terminal line it shows, so the key never enters a chat.")
 	require.Contains(t, tools["create_api_key"].Tool.Description, "create_ingest_key")
 	require.NotContains(t, tools["create_api_key"].Tool.Description, "minting one needs a write or admin key")
 }

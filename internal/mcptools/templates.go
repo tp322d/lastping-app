@@ -40,11 +40,10 @@ func registerTemplateTools(s *server.MCPServer) {
 	// get_alert_templates
 	s.AddTool(
 		newTool("get_alert_templates",
-			mcp.WithDescription("Get all custom alert message templates for a LastPing monitor. "+
-				"Returns a map of event-type (or event-type/cause) keys to template strings. "+
+			mcp.WithDescription("Gets a monitor's custom alert message templates: a map of event-type (or event-type/cause) keys to template strings. "+
 				"Keys: "+eventTypeList()+", or 'event_type/cause' "+
 				"(e.g. 'down/silence'). "+
-				"An empty result means all alerts use the built-in plain-language defaults."),
+				"An empty result means every alert uses the built-in plain-language defaults."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -63,33 +62,22 @@ func registerTemplateTools(s *server.MCPServer) {
 	// set_alert_template
 	s.AddTool(
 		newTool("set_alert_template",
-			mcp.WithDescription("Set or clear a single alert message template on a monitor. "+
-				"The template is validated for allowed variables before saving. "+
-				"Pass an empty string for template to reset that entry to the built-in default. "+
-				"All other existing templates are preserved (read-modify-write). "+
-				"Available variables: {check_name}, {event}, {status}, {cause}, {last_ping}, {schedule}, "+
-				"{incident_url}, {run_url}, {branch}, {commit}, {actor}, {failing_stage}, "+
-				"{duration}, {latency}, {status_code}, {url}, {last_step}, {step_count}, "+
-				"{run_duration}, {body}, {detail}, {title}. "+
-				"{failing_stage} is CI-only and provider-dependent: always populated on GitLab; on "+
-				"GitHub only if the repository webhook also subscribes to the workflow_job event; "+
-				"never on Jenkins, whose Notification Plugin payload carries no step detail. "+
-				"{body} is the triggering ping's own text (pings.body_excerpt) — it is how a 'blocked' "+
-				"or 'note' event's reason reaches the alert, and a custom template is the only way to "+
-				"control where in the message it appears. "+
-				"{title} is the title of the run the alert is about — the free-text body posted with "+
-				"that run's /start ping. Populated for 'fail' (when the failing ping's rid resolves to "+
-				"a titled /start) and for 'stalled'/'overrun' under the same run-identification rule as "+
-				"{last_step}; empty otherwise, including for any run with no title, which is every run "+
-				"until a caller starts posting one."),
+			mcp.WithDescription("Sets or clears one alert message template on a monitor; every other template is kept (read-modify-write). "+
+				"The template is validated for allowed variables before saving, and an empty template resets that entry to the built-in default. "+
+				"Event types: "+eventTypeList()+". The template argument lists the variables."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),
 			mcp.WithString("event_type", mcp.Required(), mcp.Description(
 				"Event type: "+eventTypeList()+".")),
 			mcp.WithString("cause", mcp.Description(
 				"Optional cause for a per-cause override (e.g. 'silence', 'overrun', 'never_started', 'stalled', 'runaway', 'upstream'). "+
-					"Omit or leave empty for an event-type-wide template.")),
+					"Omitted or empty: an event-type-wide template.")),
 			mcp.WithString("template", mcp.Required(), mcp.Description(
-				"Template text with {variable} placeholders. Empty string resets to the built-in default.")),
+				"Template text with {variable} placeholders; an empty string resets to the built-in default. "+
+					"Variables: {check_name}, {event}, {status}, {cause}, {last_ping}, {schedule}, {incident_url}, {run_url}, {branch}, {commit}, {actor}, "+
+					"{failing_stage}, {duration}, {latency}, {status_code}, {url}, {last_step}, {step_count}, {run_duration}, {body}, {detail}, {title}. "+
+					"{failing_stage}: CI only; GitLab, GitHub when the webhook subscribes to workflow_job, not Jenkins. "+
+					"{body} is the triggering ping's text, which carries a 'blocked' or 'note' reason. "+
+					"{title} is the run's title (its /start body or /title), filled for 'fail', 'stalled' and 'overrun' when the run is identified; else empty.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)

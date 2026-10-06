@@ -90,7 +90,7 @@ func scopeSentence(scope string) string {
 	if scope == "" {
 		return ""
 	}
-	return "Requires an API key with the " + scope + " scope or higher."
+	return "Requires the " + scope + " scope or higher."
 }
 
 // RequiredScope reports the minimum scope a tool needs, read off toolScopes:

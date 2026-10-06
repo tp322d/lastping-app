@@ -21,16 +21,15 @@ import (
 func registerExportTools(s *server.MCPServer) {
 	s.AddTool(
 		newTool("export_terraform",
-			mcp.WithDescription("Export existing LastPing monitors, destinations, routes, "+
-				"alert templates and status pages as Terraform HCL, including import blocks "+
-				"so they are adopted rather than recreated. Secrets are NOT exported — the "+
-				"output references Terraform variables you must fill in."),
+			mcp.WithDescription("Exports existing monitors, destinations, routes, alert templates and status pages as Terraform HCL, "+
+				"with import blocks so they are adopted rather than recreated. Secrets are not exported; the output references "+
+				"Terraform variables that hold them."),
 			mcp.WithString("tag", mcp.Description("Optional tag to filter monitors by, e.g. 'agent:claude'. "+
 				"Only monitors carrying this tag (and their routes/templates) are exported.")),
 			mcp.WithString("monitor_slug", mcp.Description("Optional slug to export a single monitor by. "+
 				"Combines with tag if both are given.")),
 			mcp.WithString("include", mcp.Description("Optional comma-separated subset of "+
-				"monitors,destinations,routes,templates,status_pages. Omit to export everything.")),
+				"monitors,destinations,routes,templates,status_pages. Omitted: everything.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)

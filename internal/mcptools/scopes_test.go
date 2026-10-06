@@ -162,7 +162,7 @@ func TestToolScopes_ReachTheAgentInTheToolDescription(t *testing.T) {
 			st, ok := served[name]
 			require.True(t, ok, "%s is not registered", name)
 
-			sentence := "Requires an API key with the " + want + " scope or higher."
+			sentence := "Requires the " + want + " scope or higher."
 			require.True(t, strings.HasPrefix(st.Tool.Description, sentence),
 				"tool %q must lead its description with %q, got: %.120q",
 				name, sentence, st.Tool.Description)
@@ -175,11 +175,11 @@ func TestToolScopes_ReachTheAgentInTheToolDescription(t *testing.T) {
 
 // TestScopeSentence_IsEmptyForAnUnknownTool pins the one branch the prepend
 // depends on: a tool with no row must get no sentence at all rather than
-// "Requires an API key with the  scope or higher.", which would be a grammar
+// "Requires the  scope or higher.", which would be a grammar
 // error shipped to every agent and a claim about a requirement nobody set.
 func TestScopeSentence_IsEmptyForAnUnknownTool(t *testing.T) {
 	require.Empty(t, scopeSentence(""))
-	require.Equal(t, "Requires an API key with the admin scope or higher.", scopeSentence("admin"))
+	require.Equal(t, "Requires the admin scope or higher.", scopeSentence("admin"))
 }
 
 // TestRequiredScope_MatchesTheTable pins the exported lookup to the table it

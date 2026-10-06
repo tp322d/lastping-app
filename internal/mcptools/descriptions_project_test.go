@@ -45,16 +45,21 @@ func TestRunDescriptions_NameTheRunFields(t *testing.T) {
 	for _, tool := range []string{"get_run", "list_runs"} {
 		desc := toolDescription(t, tool)
 		for _, want := range []string{
-			"project (the folder",
-			"receiving_spans (spans reached",
-			"in_hook_session (a run the agent reported itself inside an open hook turn",
-			"is_test (the set-up's test span",
-			"A Claude Code run whose hook is current holds its",
-			"continues the open run, and that turn's trace normally joins it",
+			"project",
+			"receiving_spans",
+			"in_hook_session",
+			"is_test",
 		} {
 			assert.Contains(t, desc, want, tool)
 		}
 	}
+	runs := toolDescription(t, "list_runs")
+	assert.Contains(t, runs, "project (the Claude Code session's folder)")
+	assert.Contains(t, runs, "receiving_spans (spans in the last 2 minutes)")
+	assert.Contains(t, runs, "is_test (excluded from counts)")
+	run := toolDescription(t, "get_run")
+	assert.Contains(t, run, "A current Claude Code hook's run holds its turns' traces")
+	assert.Contains(t, run, "a prompt after an interrupt or a blocked turn continues the open run")
 	assert.Contains(t, paramDescription(t, "list_runs", "project"), "Claude Code hook start carried this project label")
 }
 
@@ -63,7 +68,7 @@ func TestRunDescriptions_NameTheRunFields(t *testing.T) {
 func TestAgentUsage_DescribesByProject(t *testing.T) {
 	desc := toolDescription(t, "get_agent_usage")
 	assert.Contains(t, desc, "Both carry by_project: per project")
-	assert.Contains(t, desc, "by_project need not sum to or match days")
+	assert.Contains(t, desc, "so the two need not match")
 	assert.Contains(t, desc, "With project, days become one row per UTC day with model and provider empty")
 	assert.Contains(t, desc, "project narrows days and by_project, not by_agent")
 	assert.Contains(t, paramDescription(t, "get_agent_usage", "project"), "metrics-only usage has no project and is left out")
@@ -73,8 +78,8 @@ func TestAgentUsage_DescribesByProject(t *testing.T) {
 // three values, mixed included.
 func TestCostSource_NamesMixed(t *testing.T) {
 	assert.Contains(t, toolDescription(t, "list_runs"), "cost_source (client, estimated or mixed")
-	assert.Contains(t, toolDescription(t, "get_agent_usage"), "mixed when a traced day holds both")
-	assert.Contains(t, toolDescription(t, "get_agent_dependencies"), "mixed for both")
+	assert.Contains(t, toolDescription(t, "get_agent_usage"), "mixed (a traced day holds both)")
+	assert.Contains(t, toolDescription(t, "get_agent_dependencies"), "cost_source (client, estimated or mixed)")
 }
 
 // TestMinCostUSD_SaysCost: the filter matches a run's cost whatever its
@@ -86,11 +91,12 @@ func TestMinCostUSD_SaysCost(t *testing.T) {
 }
 
 // TestBlockedHold_IsDescribed: the 'blocked' route event is held 10 minutes
-// and sent only if the run is still blocked, in both places that describe it.
+// and cancelled by further activity of the same run, in both places that
+// describe it.
 func TestBlockedHold_IsDescribed(t *testing.T) {
-	assert.Contains(t, paramDescription(t, "set_route", "event_type"), "held 10 minutes and sent only if that run is still blocked then")
+	assert.Contains(t, paramDescription(t, "set_route", "event_type"), "held 10 minutes, cancelled by a ping or step of the same run in that time")
 	for _, tool := range []string{"create_monitor", "update_monitor"} {
-		assert.Contains(t, paramDescription(t, tool, "blocked_timeout_s"), "held 10 minutes and sent only if the run is still blocked then", tool)
+		assert.Contains(t, paramDescription(t, tool, "blocked_timeout_s"), "held 10 minutes, sent at most once per blocked stretch of a run", tool)
 	}
 }
 
@@ -98,8 +104,7 @@ func TestBlockedHold_IsDescribed(t *testing.T) {
 // runs on a young monitor, not missing evidence.
 func TestOpenIncidents_DescribesTheYoungMonitorNorm(t *testing.T) {
 	desc := toolDescription(t, "list_open_incidents")
-	assert.Contains(t, desc, "the norm is the median of its recent measured runs (at least 5 in the last 30 days)")
-	assert.Contains(t, desc, "days_sampled is then 0")
+	assert.Contains(t, desc, "days_sampled (0: the norm is the median of 5+ recent runs)")
 }
 
 // TestSnooze_SaysWhatTheWindowHoldsAndWhatStillNotifies: a window holds
@@ -107,9 +112,10 @@ func TestOpenIncidents_DescribesTheYoungMonitorNorm(t *testing.T) {
 // notify. The old "will not alert" claim is gone.
 func TestSnooze_SaysWhatTheWindowHoldsAndWhatStillNotifies(t *testing.T) {
 	desc := toolDescription(t, "snooze_monitor")
-	assert.Contains(t, desc, "The window holds deadline incidents (a missed or never-started run, an overrun, a stall, and a blocked run outliving blocked_timeout_s)")
+	assert.Contains(t, desc, "deadline incidents (a missed or never-started run, an overrun, a stall, a blocked run outliving blocked_timeout_s)")
 	assert.Contains(t, desc, "on an HTTP monitor, failing probes")
-	assert.Contains(t, desc, "on an HTTP monitor, any fail is treated as a probe's")
-	assert.Contains(t, desc, "Everything the job reports itself still notifies: its own fail ping, the page a blocked ping queues, a runaway ping rate")
+	assert.Contains(t, desc, "(any fail there counts as a probe's)")
+	assert.Contains(t, desc, "Still notified: the job's own fail ping, the page a blocked ping queues, a runaway ping rate")
+	assert.Contains(t, desc, "Takes exactly one of duration, until or clear=true.")
 	assert.NotContains(t, desc, "will not alert")
 }
