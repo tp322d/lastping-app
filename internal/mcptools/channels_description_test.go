@@ -73,7 +73,7 @@ func TestCreateDestination_KindParamNamesEveryKind(t *testing.T) {
 func TestCreateDestination_KindParamCarriesTheHostRule(t *testing.T) {
 	desc := paramDescription(t, "create_destination", "kind")
 
-	require.Contains(t, desc, "must be https",
+	require.Contains(t, desc, "Every destination URL has to be https",
 		"the https requirement applies to every kind and must be stated")
 
 	for kind, pins := range wantHostPins {
@@ -109,9 +109,8 @@ func TestCreateDestination_KindParamSaysWhatIsUnpinned(t *testing.T) {
 // host has told its user something false.
 func TestCreateDestination_KindParamCarriesTheOwnershipCaveat(t *testing.T) {
 	desc := paramDescription(t, "create_destination", "kind")
-	require.Contains(t, desc, "does NOT prove the endpoint belongs to")
-	require.Contains(t, desc, "multi-tenant and open to anyone who signs up")
-	require.Contains(t, desc, "Do not report a pinned destination as verified")
+	require.Contains(t, desc, "it does not prove who owns the endpoint")
+	require.Contains(t, desc, "every pinned domain is multi-tenant")
 }
 
 // TestCreateDestination_DescribesThePerProjectCap — the cap is a refusal an
@@ -122,7 +121,7 @@ func TestCreateDestination_DescribesThePerProjectCap(t *testing.T) {
 	desc := toolDescription(t, "create_destination")
 	require.Contains(t, desc, "at most 25 destinations")
 	require.Contains(t, desc, "DESTINATION_CAP_REACHED")
-	require.Contains(t, desc, "delete one with delete_destination rather than retrying")
+	require.Contains(t, desc, "(DESTINATION_CAP_REACHED beyond that)")
 }
 
 // TestUpdateDestination_ConfigParamCarriesTheRules — update_destination names
@@ -135,10 +134,10 @@ func TestUpdateDestination_ConfigParamCarriesTheRules(t *testing.T) {
 	for _, k := range wantDestinationKinds {
 		require.Contains(t, desc, k, "update_destination's config param description is missing %q", k)
 	}
-	require.Contains(t, desc, "must be https")
-	require.Contains(t, desc, "only the fields listed for its kind, each exactly once",
+	require.Contains(t, desc, "has to be https")
+	require.Contains(t, desc, "naming only that kind's fields, each once",
 		"the strict-keys rule is what turns a typo'd field into a 400 rather than a silent no-op")
-	require.Contains(t, desc, "does NOT prove the endpoint belongs to",
+	require.Contains(t, desc, "does not prove who owns the endpoint",
 		"the ownership caveat has to be on both destination-writing tools")
 }
 
@@ -149,7 +148,7 @@ func TestUpdateDestination_ConfigParamCarriesTheRules(t *testing.T) {
 // misinformation these tests exist to prevent.
 func TestDestinationTools_KindListIsNotEmpty(t *testing.T) {
 	desc := paramDescription(t, "create_destination", "kind")
-	require.Contains(t, desc, "A BRANDED kind must point at its vendor's host: ")
+	require.Contains(t, desc, "a branded kind has to point at its vendor's host: ")
 	require.NotContains(t, desc, "vendor's host: For any other endpoint",
 		"the generated host-pin sentence collapsed to nothing")
 }
@@ -167,7 +166,7 @@ func TestDestinationTools_ScopeSentenceStillLeads(t *testing.T) {
 	} {
 		t.Run(tc.tool, func(t *testing.T) {
 			desc := toolDescription(t, tc.tool)
-			want := "Requires an API key with the " + tc.scope + " scope or higher."
+			want := "Requires the " + tc.scope + " scope or higher."
 			require.True(t, strings.HasPrefix(desc, want),
 				"%s must lead with %q, got: %.80q", tc.tool, want, desc)
 		})

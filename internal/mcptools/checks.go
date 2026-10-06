@@ -170,177 +170,121 @@ const notifyMinRunClearSentinel = 0
 // of zero is what makes its sentinel safe.
 const runawayCeilingClearSentinel = 0
 
-// stallNeedsStepsSentence is the sentence the hosted server uses on every
-// surface to say that stall detection only works for a job that calls /step.
-// The Claude Code hook and the reporting prompt never send a step, so an
-// agent that arms step_timeout_s on a monitor they report to gets a stalled
-// incident on every run. Matches the hosted server at mcp.lastping.dev.
-const stallNeedsStepsSentence = "Stall detection needs your job to call /step: the Claude Code hook and the reporting prompt do not send steps, so leave step_timeout_s unset for them."
-
 // detectionDescriptions are shared between create_monitor and update_monitor so
-// the two tools cannot drift into describing the same field differently.
+// the two tools cannot drift into describing the same field differently. They
+// are declarative facts about the field (the directory policy forbids
+// instructions aimed at the model); policy_test.go guards the wording.
 const (
-	failureThresholdDesc = "Number of consecutive failures required before an incident opens. Default 1 (open on the very first failure). " +
-		"This is how you stop a single transient blip from paging someone: set 2-5 on a job that fails occasionally for reasons that resolve themselves, " +
-		"and no incident opens until that many runs in a row have failed. Any success resets the count to zero. " +
-		"It gates the 'fail' cause ONLY — silence (a missed ping), overrun, never_started and runaway are time- or rate-based, " +
-		"so a consecutive count means nothing for them and they are never delayed by it. " +
-		"A run that ends on the model provider's API error (server_error, overloaded, rate_limit) neither counts toward it nor resets it: " +
-		"those open an 'upstream' incident once 3 runs in a row end that way, or this many when it is higher. Range 1-100."
+	failureThresholdDesc = "Consecutive failures required before an incident opens; default 1 (the first failure). " +
+		"2-5 absorbs a job's occasional self-resolving failure. Any success resets the count. " +
+		"It gates only the 'fail' cause: silence, overrun, never_started and runaway are time- or rate-based and never delayed by it. " +
+		"A run ending on the model provider's API error (server_error, overloaded, rate_limit) neither counts nor resets it; " +
+		"3 such runs in a row, or this many when higher, open an 'upstream' incident. Range 1-100."
 
-	maxRuntimeDesc = "Maximum seconds a single run may take before it is reported overdue (the 'overrun' rule), measured from the run's start ping. " +
-		"Omit to fall back to grace_s. This is how a long job avoids being flagged overdue while still being detected quickly if it goes silent: " +
-		"e.g. grace_s=600 with max_runtime_s=14400 alerts 10 minutes after a missed ping but tolerates a 4-hour run. " +
-		"It replaces grace_s for the overrun deadline ONLY — the silence rule and the first-run deadline still use grace_s. Range 60-31536000. " +
-		"Not supported on http monitors: a probe has no start/success pair, so the overrun rule can never fire and the API returns 400 MAX_RUNTIME_NOT_SUPPORTED " +
-		"(use probe_timeout_s to bound a single probe)."
+	maxRuntimeDesc = "Maximum seconds one run may take, from its start ping, before it is reported overdue (the 'overrun' rule). Unset falls back to grace_s. " +
+		"Example: grace_s=600 with max_runtime_s=14400 alerts 10 minutes after a missed ping but tolerates a 4-hour run. " +
+		"It replaces grace_s for the overrun deadline only; the silence rule and the first-run deadline still use grace_s. Range 60-31536000. " +
+		"Not supported on http monitors (400 MAX_RUNTIME_NOT_SUPPORTED); probe_timeout_s bounds a probe."
 
 	// agentIDDesc is shared between create_monitor and update_monitor so the
 	// explicit-attachment rule cannot drift into two different wordings.
-	agentIDDesc = "Attach this monitor to an agent from the registry, by the agent's id OR its slug (both are returned by register_agent). " +
-		"Omit for a monitor with no owning agent. Naming an agent that does not exist is an error — 400 UNKNOWN_AGENT — " +
-		"it is NEVER created implicitly; call register_agent first to get a valid agent_id."
+	agentIDDesc = "Attaches the monitor to a registered agent, by the agent's id or slug (register_agent returns both). " +
+		"An agent that does not exist is an error (400 UNKNOWN_AGENT); no agent is created implicitly."
 
-	stepTimeoutDesc = "Progress budget in seconds: how long an armed run may go without reporting a step before a 'stalled' incident opens (the stall rule). " +
-		"The clock is anchored on the LATER of the run's start ping and its most recent step, so a run that wedges before its first step is caught too. " +
-		"Reach for this when 'still running' and 'still making progress' are different things — a long agent loop, a multi-stage pipeline, a migration. " +
-		"max_runtime_s alone tells you nothing until the whole budget expires; step_timeout_s=300 on a 4-hour budget tells you within five minutes, and names the last step that reported. " +
-		"To use it the run must report steps: call get_ping_instructions and use curl_step (POST <ping_url>/step?rid=<run-id>&step=<name>). " +
-		"A monitor with step_timeout_s set whose job never reports a step will open a stalled incident on EVERY run — set the field and instrument the job in the same change. " +
-		stallNeedsStepsSentence + " " +
-		"Default: unset, which disables stall detection entirely; a monitor that sets nothing behaves exactly as it did before this field existed. Range 10-86400. " +
-		"Two constraints. (1) It must be strictly LESS than the effective run budget, COALESCE(max_runtime_s, grace_s), or the API returns 400 STEP_TIMEOUT_EXCEEDS_BUDGET — " +
-		"at or above the budget the run overruns first, so the stall rule could never fire. (2) Not supported on http monitors: a probe never arms a run and has no /step endpoint to call, " +
-		"so the API returns 400 STEP_TIMEOUT_NOT_SUPPORTED. " +
-		"A step resets the stall clock ONLY — it never extends max_runtime_s, so an agent that reports progress forever still overruns."
+	stepTimeoutDesc = "Seconds an armed run may go without a step before a 'stalled' incident opens, timed from the later of its start ping and its latest step. " +
+		"Steps are POST <ping_url>/step?rid=<run-id>&step=<name> (curl_step in get_ping_instructions). " +
+		"When set, a job that sends no steps opens a stalled incident on every run. " + stallNeedsStepsFact + " " +
+		"Unset (default): no stall detection. Range 10-86400, strictly below COALESCE(max_runtime_s, grace_s) (400 STEP_TIMEOUT_EXCEEDS_BUDGET). " +
+		"Not supported on http monitors (400 STEP_TIMEOUT_NOT_SUPPORTED). A step never extends max_runtime_s."
 
-	// blockedTimeoutDesc is shared between create_monitor and update_monitor for
-	// the same reason as the other detection descriptions above: the fallback
-	// value is a fact an agent must get right, not something worth risking two
-	// different wordings of.
-	blockedTimeoutDesc = "Maximum seconds a run may sit in the 'blocked' state (an agent reported it is waiting on a human) before a 'blocked' incident opens. " +
-		"UNSET DOES NOT MEAN WAIT FOREVER: omitting this does not disable the timeout, it falls back to the default, which is 24 HOURS — an agent " +
-		"still blocked 24 hours after reporting so, with this field never set, gets a 'blocked' incident regardless. Lower it to be paged sooner when a stuck " +
-		"approval is urgent; raise it for work that legitimately waits on a human for longer than a day. This is distinct from the non-incident " +
-		"'blocked' notification a route on the 'blocked' event type delivers (see set_route), which is held 10 minutes and sent only if the run is still blocked then, " +
-		"at most once per blocked stretch of a run; this field governs the separate incident that opens only if the wait outlives the timeout. Accepted on every monitor_type: unlike max_runtime_s/step_timeout_s it has " +
-		"no run-scoped precondition an http monitor could fail, so there is nothing to reject."
+	// stallNeedsStepsFact states, as a fact about the tool, that stall
+	// detection only works for a job that calls /step: the Claude Code hook
+	// and the reporting prompt never send a step. Matches the hosted server at
+	// mcp.lastping.dev.
+	stallNeedsStepsFact = "The Claude Code hook and the reporting prompt send no steps."
 
-	expectEveryDesc = "SILENCE FLOOR in seconds: open a 'silence' incident if NO ping of any kind — success, start, fail, step — has arrived within this window, " +
-		"regardless of the schedule. It is anchored on the monitor's last activity, not on a cadence, which is what makes it the ONLY absence rule an 'on_demand' " +
-		"monitor can have: that schedule_kind arms nothing between runs, so without this field an on_demand monitor reads 'up' forever no matter how long the agent " +
-		"stays dark. Set it on any on_demand agent monitor you would be alarmed to find silent — that is what it is for. " +
-		"It does NOT fire mid-run: while a run is in flight (a start ping is outstanding) the floor stands down entirely and the run clock owns detection " +
-		"(max_runtime_s, step_timeout_s), so a legitimate 4-hour run that reports nothing is still not an incident. A 'blocked' ping also pauses it, bounded by " +
-		"blocked_timeout_s. On 'simple'/'cron' monitors it is a backstop rather than the main rule: it joins the existing deadline as whichever is SOONER, so it " +
-		"can tighten detection under a long cadence (a daily cron has a ~25-hour blind window) but can never loosen it. " +
-		"Default: unset, which means no floor and is exactly how every monitor behaved before this field existed. Range 60-31536000. " +
-		"Accepted on every monitor_type and every schedule_kind."
+	// blockedTimeoutDesc is shared between create_monitor and update_monitor:
+	// the fallback value is a fact an agent has to get right.
+	blockedTimeoutDesc = "Seconds a run may stay 'blocked' (an agent reported it is waiting on a human) before a 'blocked' incident opens. " +
+		"Unset means the 24-hour default, not no limit. " +
+		"Separate from the 'blocked' notification a route delivers (held 10 minutes, sent at most once per blocked stretch of a run). " +
+		"Accepted on every monitor_type."
 
-	notifyMinRunDesc = "NOTIFICATION DURATION FLOOR in seconds: a run SHORTER than this does not produce an INFO-CLASS notification (success, started, every-run, note). " +
-		"This exists for exactly one problem: on an agent monitor, one run is one task you asked for, so asking the agent 'what's 2+2' produces a start and a success " +
-		"notification exactly like a 56-minute deploy does. If you have routed success/started/every-run/note to a destination, you WILL be paged for trivial runs " +
-		"unless you set this. " +
-		"IT NEVER SUPPRESSES A FAILURE. down, fail, recovery and blocked are alert-class and are never affected by this field, however short the run — a run that " +
-		"failed in two seconds is exactly what you need to hear about, and this field cannot silence that, structurally, no matter how it is set. " +
-		"It also never suppresses 'started': a run's duration does not exist yet the moment it begins, so started is always reported regardless of this floor. " +
-		"And it never suppresses an event whose duration could not be measured at all (e.g. a bare success with no preceding start ping) — an unknown duration " +
-		"always means 'notify', never 'suppress'. " +
-		"Default: unset, which means no floor and is exactly how every monitor behaved before this field existed. Range 60-31536000. " +
-		"Not supported on http monitors: an http probe has no start/success pair, so its run duration is never measured and the floor could never apply " +
-		"(the API returns 400 NOTIFY_MIN_RUN_NOT_SUPPORTED)."
+	expectEveryDesc = "Silence floor in seconds: a 'silence' incident opens when no ping of any kind (success, start, fail, step) arrives within this window, " +
+		"timed from the monitor's last activity. It is the only absence rule an 'on_demand' monitor has. " +
+		"It stands down while a run is in flight (the run clock owns that), and a 'blocked' ping pauses it up to blocked_timeout_s. " +
+		"On 'simple'/'cron' monitors it joins the schedule deadline as whichever is sooner, so it can only tighten detection. " +
+		"Unset (default): no floor. Range 60-31536000. Accepted on every monitor_type and schedule_kind."
+
+	notifyMinRunDesc = "Notification duration floor in seconds: a run shorter than this sends no info-class notification (success, every-run, note), " +
+		"so a trivial agent run does not notify a destination those events are routed to. " +
+		"It never suppresses a failure: down, fail, recovery, blocked and started always notify, as does an event whose duration was not measured (such as a success with no start ping). " +
+		"Unset (default): no floor. Range 60-31536000. Not supported on http monitors (400 NOTIFY_MIN_RUN_NOT_SUPPORTED)."
 
 	// runawayCeilingDesc and monitorFromDesc are shared for the same
 	// anti-drift reason as the detection descriptions above.
-	runawayCeilingDesc = "PING-RATE CEILING: the maximum number of pings this monitor may receive in a rolling one-hour window. Exceeding it opens a 'runaway' incident. " +
-		"This is the rule that catches a job or agent stuck in a LOOP — the failure every other rule misses, because a looping agent is pinging enthusiastically and " +
-		"therefore reads 'up' the whole time it is burning tokens or money. Set it a little above the monitor's real cadence: a job that runs every 15 minutes sends about " +
-		"4 pings/hour, so 20 absorbs retries and still catches a loop. It is RATE-based, so failure_threshold does not gate it and neither does any run budget. " +
-		"Default: unset, which disables the runaway rule entirely."
+	runawayCeilingDesc = "Ping-rate ceiling: the most pings this monitor may receive in a rolling hour; exceeding it opens a 'runaway' incident. " +
+		"It catches a job or agent stuck in a loop, which keeps pinging and otherwise reads 'up'. " +
+		"A job every 15 minutes sends about 4 pings an hour, so 20 leaves room for retries. " +
+		"Rate-based: failure_threshold and run budgets do not gate it. Unset (default): the rule is off."
 
-	monitorFromDesc = "DORMANT UNTIL: an RFC 3339 timestamp before which no deadline is computed and no incident can open — the monitor is fully configured but not yet armed. " +
-		"Use it when you provision ahead of the work: a monitor for a job that does not start running until next Monday is otherwise 'late' from the moment you create it, " +
-		"which is a false alert on day one. The first-run deadline is seeded as monitor_from + grace_s. " +
-		"Default: unset, meaning deadlines start immediately. Example: '2026-01-01T00:00:00Z'."
+	monitorFromDesc = "Dormant until: an RFC 3339 timestamp before which no deadline is computed and no incident opens, for a monitor provisioned ahead of its job. " +
+		"The first-run deadline is monitor_from + grace_s. Unset (default): deadlines start immediately. Example: '2026-01-01T00:00:00Z'."
 
 	// CI binding descriptions. ci_provider is create-only (immutable on PATCH),
 	// so only ci_workflow/ci_branch are shared with update_monitor.
-	ciProviderDesc = "Bind this monitor to a CI system, so the CI system itself reports every run by webhook and the job needs NO ping code at all. " +
-		"One of: 'github', 'gitlab', 'jenkins'. " +
-		"SET-ONCE: ci_provider can only be chosen when the monitor is created — update_monitor cannot change or remove it, so a monitor bound to the wrong provider must be deleted and recreated. " +
-		"Setting it generates a webhook secret that is returned exactly ONCE, in THIS call's response, together with the webhook URL. It is never retrievable afterwards — " +
-		"no MCP tool and no API read returns it again — so copy both out of the response and configure the CI webhook before doing anything else. " +
-		"Omit for a monitor that pings for itself. Also set ci_workflow and ci_branch unless the repository really has exactly one workflow on one branch. " +
-		"NOT ACCEPTED on monitor_type='http': an http probe is never bound to CI, and the API returns 400 FIELD_NOT_IN_SHAPE. It used to accept the provider, " +
-		"create no binding, and report success."
+	ciProviderDesc = "Binds the monitor to a CI system ('github', 'gitlab' or 'jenkins'), whose webhook then reports every run with no ping code in the job. " +
+		"Fixed at creation: update_monitor cannot change or remove it. " +
+		"The webhook secret and URL appear only in this call's result; no tool or API read returns the secret again. " +
+		"Not accepted on monitor_type='http' (400 FIELD_NOT_IN_SHAPE). ci_workflow and ci_branch narrow which runs count."
 
-	ciWorkflowDesc = "CI filter: only count runs of the workflow / pipeline / job with this exact name. REQUIRES ci_provider, and the API enforces it: " +
-		"without a CI binding this filter has nowhere to be stored, so the request is refused with 400 FIELD_NOT_IN_SHAPE rather than accepted and discarded. " +
-		"Note that monitor_type='ci' does NOT bind anything on its own — ci_provider does. " +
-		"ONE EXCEPTION, and it is on the path agents use most, so do not rely on the enforcement here: create_monitor on a slug that ALREADY EXISTS is an upsert, " +
-		"and the upsert never writes this filter. With ci_provider in the same call the request is accepted and the filter is silently discarded; without it the " +
-		"request is refused, and doing what the error advises — adding ci_provider — reaches the discarding case instead. Set this filter with update_monitor, " +
-		"which does persist it. " +
-		"WITHOUT IT, EVERY workflow in the repository reports to this monitor — so one unrelated failing workflow opens an incident against a job that is perfectly healthy, " +
-		"and a green run of a different workflow clears an incident the real job never recovered from. Set it whenever the repository has more than one workflow."
+	ciWorkflowDesc = "CI filter: only runs of the workflow, pipeline or job with this exact name count. " +
+		"Needs ci_provider: without a CI binding it is refused with 400 FIELD_NOT_IN_SHAPE (monitor_type='ci' alone binds nothing). " +
+		"Exception: create_monitor on an existing slug (an upsert) never writes it, and with ci_provider in the same call it is accepted and discarded; " +
+		"update_monitor persists it. Unset, every workflow in the repository reports to the monitor, so an unrelated workflow's failure opens an incident and its success clears one."
 
-	ciBranchDesc = "CI filter: only count runs on this branch, e.g. 'main'. REQUIRES ci_provider, and the API enforces it: without a CI binding the request " +
-		"is refused with 400 FIELD_NOT_IN_SHAPE rather than accepted and discarded. " +
-		"Subject to the SAME upsert exception as ci_workflow — create_monitor on an existing slug never writes this filter; use update_monitor. " +
-		"WITHOUT IT a run on ANY branch — a feature branch, a fork's pull request — reports to this monitor, so somebody else's broken branch marks your monitor down. " +
-		"Set it to the branch whose health you actually care about, which is almost always the default branch."
+	ciBranchDesc = "CI filter: only runs on this branch count, e.g. 'main'. Needs ci_provider (400 FIELD_NOT_IN_SHAPE without a CI binding). " +
+		"Same upsert exception as ci_workflow: create_monitor on an existing slug never writes it; update_monitor does. " +
+		"Unset, a run on any branch, a fork's pull request included, reports to the monitor."
 
-	// HTTP probe descriptions. Shared between create_monitor and
-	// update_monitor: an http monitor whose 'healthy' definition is described
-	// one way on create and another on update is exactly the drift the other
-	// shared constants in this block exist to prevent.
+	// HTTP probe descriptions, shared between create_monitor and update_monitor.
 	probeURLDesc = "http monitors only: the absolute http/https URL to probe. Required when monitor_type='http'. " +
 		"The host is resolved at write time and rejected if it resolves only to private/link-local addresses."
 
 	probeIntervalDesc = "http monitors only: how often to probe, in seconds. Required when monitor_type='http'. Range 30-86400."
 
-	probeMethodDesc = "http monitors only: the HTTP method the probe sends. One of 'GET', 'HEAD', 'POST'. Default 'GET'. " +
-		"Use 'HEAD' for a cheap liveness check when the body does not matter — but note it returns no body, so probe_expected_body cannot match anything."
+	probeMethodDesc = "http monitors only: the HTTP method the probe sends: 'GET' (default), 'HEAD' or 'POST'. " +
+		"'HEAD' returns no body, so probe_expected_body cannot match with it."
 
-	probeExpectedStatusDesc = "http monitors only: the EXACT HTTP status code that counts as healthy. Default 200; any other code fails the probe. " +
-		"Set it when the healthy answer is not 200 — 204 for a no-content health endpoint, or 301 when what you are checking is that a redirect still exists " +
-		"(pair that with probe_follow_redirects=false, or the probe will follow it and see the destination's status instead)."
+	probeExpectedStatusDesc = "http monitors only: the exact HTTP status that counts as healthy; default 200, any other code fails the probe. " +
+		"E.g. 204 for a no-content endpoint, or 301 to check that a redirect still exists (with probe_follow_redirects=false; otherwise the probe sees the destination's status)."
 
-	probeExpectedBodyDesc = "http monitors only: a substring that MUST appear in the response body for the probe to count as healthy. " +
-		"THIS IS THE DIFFERENCE BETWEEN 'the server answered' AND 'the app works': a broken app that renders an error page still returns 200, passes a status-only check, " +
-		"and leaves the monitor green. Match on something only a healthy response contains, e.g. '\"status\":\"ok\"'. Substring match, not a regex, and case-sensitive. " +
-		"Default: empty, meaning the body is not inspected at all."
+	probeExpectedBodyDesc = "http monitors only: a substring the response body has to contain for the probe to pass, e.g. '\"status\":\"ok\"'. " +
+		"A broken app's error page can still return 200 and pass a status-only check; this catches it. " +
+		"Case-sensitive substring, not a regex. Default empty: the body is not inspected."
 
-	probeTimeoutDesc = "http monitors only: how many seconds a single probe may take before it counts as a failure. Range 1-30, default 10. " +
-		"This is the http equivalent of max_runtime_s, which http monitors reject: it is the only way to say 'answering, but far too slowly to be healthy'."
+	probeTimeoutDesc = "http monitors only: seconds one probe may take before it counts as a failure. Range 1-30, default 10. " +
+		"The http counterpart of max_runtime_s, which http monitors reject."
 
-	probeFollowRedirectsDesc = "http monitors only: whether the probe follows 3xx redirects. Default false. " +
-		"Leaving it false is usually what you want: the redirect itself is then compared against probe_expected_status like any other response, so a site that starts " +
-		"redirecting to a login wall, a parking page or an outage notice is CAUGHT rather than silently followed to a healthy-looking 200. " +
-		"Set true only when the URL you are checking is legitimately a redirect to the thing you actually care about."
+	probeFollowRedirectsDesc = "http monitors only: whether the probe follows 3xx redirects; default false. " +
+		"When false, the redirect itself is compared with probe_expected_status, so a site that starts redirecting to a login wall or a parking page " +
+		"fails the probe instead of passing on the destination's 200."
 
 	// onDemandTradeoffDesc is shared between create_monitor and update_monitor
-	// so the trade-off an agent is choosing cannot drift into two different
-	// explanations depending on which tool it called.
-	onDemandTradeoffDesc = "'on_demand' means no cadence at all: no period_s, no cron_expr — the API returns 400 if either is supplied — and, by default, NO ABSENCE " +
-		"DEADLINES ARE ARMED BETWEEN RUNS. What this trades away: nothing tells you if the agent is never invoked again; silence between runs is invisible unless you " +
-		"opt in to expect_every_s. " +
-		"What it buys: a healthy agent that nobody happens to invoke for a week never generates a false 'late' or 'down' for simply not having been asked to run. " +
-		"Only run-scoped detection still applies once a run starts — max_runtime_s (overrun), step_timeout_s (stall), blocked_timeout_s (stuck on a human) — because " +
-		"those are anchored to a run's own start ping, not to a cadence. " +
-		"IMPORTANT: if you would be alarmed to find this agent silent for hours, set expect_every_s as well — it is the silence floor, and it is the only thing that " +
-		"makes an on_demand monitor detect absence at all. Choose 'simple'/'cron' when the agent is supposed to run on a cadence; choose " +
-		"'on_demand' when invocation is inherently irregular and a quiet stretch between runs is expected, not a symptom."
+	// so the trade-off cannot drift into two explanations.
+	onDemandTradeoffDesc = "'on_demand' has no cadence (period_s or cron_expr with it is a 400) and arms no absence deadline between runs: " +
+		"an agent that is never invoked again raises nothing unless expect_every_s is set, and an idle healthy agent never raises a false 'late'. " +
+		"Once a run starts, max_runtime_s, step_timeout_s and blocked_timeout_s still apply. " +
+		"'simple'/'cron' fit work on a cadence; 'on_demand' fits irregular invocation."
 
 	// onDemandGraceDefaultDesc is the sentence create_monitor's grace_s
 	// carries about the default createMonitor fills in.
-	onDemandGraceDefaultDesc = "Omit on an on_demand monitor and LastPing uses 300 seconds; on_demand has no cadence, so grace only sets the first-run deadline and the overrun fallback."
+	onDemandGraceDefaultDesc = "Omitted on an on_demand monitor, LastPing uses 300 seconds; on_demand has no cadence, so grace only sets the first-run deadline and the overrun fallback."
 
 	// traceContentDesc is shared by create_monitor and update_monitor: the
-	// default and who may change it must read the same in both.
-	traceContentDesc = "What this monitor's traces keep of prompt, command and tool content. 'dropped' (the default) removes it; 'redacted' keeps it, " +
-		"with every secret-shaped value redacted when it arrives. Only a person should choose 'redacted': never set it on your own initiative, only when " +
-		"the person you work for has asked for content to be stored."
+	// default and what each value stores read the same in both.
+	traceContentDesc = "What this monitor's traces keep of prompt, command and tool content: 'dropped' (the default) removes it; " +
+		"'redacted' stores prompt, command and tool content from the traced sessions, with secret-shaped values redacted on arrival."
 )
 
 // onDemandDefaultGraceS is the grace createMonitor sends for an on_demand
@@ -351,44 +295,41 @@ func registerCheckTools(s *server.MCPServer) {
 	// create_monitor
 	s.AddTool(
 		newTool("create_monitor",
-			mcp.WithDescription("Create a new LastPing monitor (or update an existing one if slug matches — returns 'updated' note on upsert). "+
-				"For heartbeat/ci monitors supply schedule_kind ('simple' requires period_s, 'cron' requires cron_expr, 'on_demand' requires neither). "+
-				"For http monitors supply probe_url and probe_interval_s instead — and set probe_expected_status/probe_expected_body too, because those are what define 'healthy'; "+
-				"a probe with neither only proves something answered. "+
-				"For a monitor fed by CI rather than by its own pings, set ci_provider here: it is the ONLY place it can be set, and the secret it returns is shown exactly once."),
+			mcp.WithDescription("Creates a monitor, or updates the existing one when slug matches (an upsert; the result says 'updated'). "+
+				"Heartbeat and ci monitors take schedule_kind: 'simple' with period_s, 'cron' with cron_expr, or 'on_demand' with neither. "+
+				"http monitors take probe_url and probe_interval_s; probe_expected_status and probe_expected_body define a healthy response, "+
+				"and a probe with neither only checks that something answered. "+
+				"ci_provider can be set only here, and the webhook secret it returns appears only in this result."),
 			mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable monitor name, e.g. 'Daily backup job'.")),
-			mcp.WithString("slug", mcp.Description("Optional stable ID. If a monitor with this slug exists, it will be updated (upsert). "+
-				"Trimmed and lowercased automatically. Must match ^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$ (3-50 chars, lowercase alphanumeric and hyphens, "+
-				"starting and ending alphanumeric) after normalisation. UUID-shaped slugs are rejected — they would be ambiguous with a monitor id "+
-				"when importing into Terraform. Omit entirely for no slug.")),
-			mcp.WithString("monitor_type", mcp.Description("'heartbeat' (default), 'ci', or 'http'. Any other value is refused with 400 UNKNOWN_MONITOR_TYPE. "+
-				"'ci' is a label, not a binding: a CI monitor is a heartbeat monitor with ci_provider set, so passing monitor_type='ci' WITHOUT ci_provider "+
-				"creates an ordinary heartbeat and its ci_workflow/ci_branch filters are refused.")),
-			mcp.WithString("schedule_kind", mcp.Description("'simple' (requires period_s), 'cron' (requires cron_expr), or 'on_demand' (requires neither). "+
-				"Required for heartbeat/ci monitors. NOT ACCEPTED on monitor_type='http', together with period_s, cron_expr and tz: an http monitor's "+
-				"schedule is derived from probe_interval_s, so the API refuses all four with 400 FIELD_NOT_IN_SHAPE instead of accepting and ignoring them. "+
+			mcp.WithString("slug", mcp.Description("Optional stable ID; when a monitor with this slug exists it is updated (upsert). "+
+				"Trimmed and lowercased, then it has to match ^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$ (3-50 chars, lowercase alphanumeric and hyphens). "+
+				"UUID-shaped slugs are rejected (ambiguous with a monitor id in a Terraform import). Omitted: no slug.")),
+			mcp.WithString("monitor_type", mcp.Description("'heartbeat' (default), 'ci' or 'http'; any other value is refused with 400 UNKNOWN_MONITOR_TYPE. "+
+				"'ci' is a label, not a binding: without ci_provider it creates an ordinary heartbeat, and ci_workflow/ci_branch are refused.")),
+			mcp.WithString("schedule_kind", mcp.Description("'simple' (with period_s), 'cron' (with cron_expr) or 'on_demand' (neither). Required for heartbeat and ci monitors. "+
+				"Not accepted on an http monitor, and neither are period_s, cron_expr and tz: its schedule comes from probe_interval_s (400 FIELD_NOT_IN_SHAPE). "+
 				onDemandTradeoffDesc)),
 			mcp.WithNumber("period_s", mcp.Description("Ping interval in seconds. Required when schedule_kind='simple'.")),
 			mcp.WithString("cron_expr", mcp.Description("5-field cron expression, e.g. '0 3 * * *'. Required when schedule_kind='cron'.")),
 			mcp.WithString("tz", mcp.Description("IANA timezone for cron evaluation. Defaults to UTC.")),
 			mcp.WithNumber("grace_s", mcp.Description("Grace period in seconds after a ping is due before alerting. "+onDemandGraceDefaultDesc+
-				" On an upsert (existing slug), omitting it on an on_demand monitor sets 300: pass the current value to keep it.")),
+				" On an upsert (existing slug), omitting it on an on_demand monitor sets 300.")),
 			mcp.WithNumber("failure_threshold", mcp.Description(failureThresholdDesc+
-				" On an upsert (existing slug), omitting this resets the monitor's threshold to 1 — pass the current value to keep it.")),
+				" On an upsert (existing slug), omitting it resets the threshold to 1.")),
 			mcp.WithNumber("max_runtime_s", mcp.Description(maxRuntimeDesc+
-				" On an upsert (existing slug), omitting this clears the monitor's max_runtime_s — pass the current value to keep it.")),
+				" On an upsert (existing slug), omitting it clears the value.")),
 			mcp.WithNumber("step_timeout_s", mcp.Description(stepTimeoutDesc+
-				" On an upsert (existing slug), omitting this clears the monitor's step_timeout_s and turns stall detection back off — pass the current value to keep it.")),
+				" On an upsert (existing slug), omitting it clears the value and turns stall detection off.")),
 			mcp.WithNumber("blocked_timeout_s", mcp.Description(blockedTimeoutDesc+
-				" On an upsert (existing slug), omitting this clears the monitor's blocked_timeout_s and falls back to the 24h default — pass the current value to keep it.")),
+				" On an upsert (existing slug), omitting it clears the value back to the 24h default.")),
 			mcp.WithNumber("expect_every_s", mcp.Description(expectEveryDesc+
-				" On an upsert (existing slug), omitting this clears the monitor's expect_every_s and turns the silence floor back off — pass the current value to keep it.")),
+				" On an upsert (existing slug), omitting it clears the value and turns the silence floor off.")),
 			mcp.WithNumber("notify_min_run_s", mcp.Description(notifyMinRunDesc+
-				" On an upsert (existing slug), omitting this clears the monitor's notify_min_run_s and turns the notification duration floor back off — pass the current value to keep it.")),
+				" On an upsert (existing slug), omitting it clears the value and turns the floor off.")),
 			mcp.WithNumber("runaway_ceiling", mcp.Description(runawayCeilingDesc+
-				" On an upsert (existing slug), omitting this clears the monitor's ceiling and turns the runaway rule back off — pass the current value to keep it.")),
+				" On an upsert (existing slug), omitting it clears the ceiling and turns the runaway rule off.")),
 			mcp.WithString("monitor_from", mcp.Description(monitorFromDesc+
-				" On an upsert (existing slug), omitting this clears the monitor's monitor_from and arms it immediately — pass the current value to keep it.")),
+				" On an upsert (existing slug), omitting it clears the value and arms the monitor immediately.")),
 			mcp.WithString("probe_url", mcp.Description(probeURLDesc)),
 			mcp.WithNumber("probe_interval_s", mcp.Description(probeIntervalDesc)),
 			mcp.WithString("probe_method", mcp.Description(probeMethodDesc)),
@@ -401,10 +342,10 @@ func registerCheckTools(s *server.MCPServer) {
 			mcp.WithString("ci_branch", mcp.Description(ciBranchDesc)),
 			mcp.WithString("tags", mcp.Description("Comma-separated labels for namespace scoping, e.g. 'agent:claude,env:prod'. Max 20 tags, each max 50 chars.")),
 			mcp.WithString("agent_id", mcp.Description(agentIDDesc+
-				" On an upsert (existing slug), omitting this leaves the monitor's current attachment (or lack of one) unchanged; supplying it re-applies the attachment, "+
-				"so an agent re-running its own registration converges to 'attached' every time rather than silently no-opping after the first call.")),
+				" Omitted on a create: no owning agent. On an upsert (existing slug), omitting it leaves the current attachment unchanged, "+
+				"and supplying it re-applies the attachment, so a repeated registration converges to 'attached'.")),
 			mcp.WithString("trace_content", mcp.Enum("dropped", "redacted"), mcp.Description(traceContentDesc+
-				" Omit on a create for dropped; on an upsert (existing slug), omitting it leaves the stored value unchanged.")),
+				" Omitted on a create: dropped; on an upsert (existing slug), omitting it leaves the stored value unchanged.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -418,8 +359,8 @@ func registerCheckTools(s *server.MCPServer) {
 	// list_monitors
 	s.AddTool(
 		newTool("list_monitors",
-			mcp.WithDescription("List all monitors in the authenticated LastPing project. Returns id, name, slug, status, ping_url for each. Use the tag param to filter by a single tag."),
-			mcp.WithString("tag", mcp.Description("Optional tag to filter by, e.g. 'agent:claude'. Returns only monitors that have this tag.")),
+			mcp.WithDescription("Lists every monitor in the project with id, name, slug, status and ping_url. tag narrows the list to monitors carrying one tag."),
+			mcp.WithString("tag", mcp.Description("Optional tag to filter by, e.g. 'agent:claude'. Only monitors with this tag are returned.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -433,13 +374,11 @@ func registerCheckTools(s *server.MCPServer) {
 	// get_monitor
 	s.AddTool(
 		newTool("get_monitor",
-			mcp.WithDescription("Get a single LastPing monitor by UUID. Returns the monitor's full configuration including its output assertions "+
-				"(the `assertions` field: conditions a successful run's ping body must satisfy; absent when the monitor has none) and its metric "+
-				"guards (the `guards` field: ceilings on a number the job reports about itself; absent when the monitor has none) and its alert "+
-				"ROUTING (the `routes` field: which destinations receive which event type; absent when the monitor has none). "+
-				"Read this before calling update_monitor with assertions or guards, and before calling set_route — every one of those three writes REPLACES a whole set, "+
-				"so an agent that did not read the current one first will silently drop assertions, guards or destinations somebody else configured."),
-			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID."))),
+			mcp.WithDescription("Gets one monitor by UUID with its full configuration, including `assertions` (conditions a successful run's ping body has to satisfy), "+
+				"`guards` (ceilings on a number the job reports) and `routes` (which destinations receive which event type); each is absent when empty. "+
+				"update_monitor's assertions and guards and set_route each replace a whole set, and this result holds the current sets."),
+			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),
+		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
 			if err != nil {
@@ -456,58 +395,51 @@ func registerCheckTools(s *server.MCPServer) {
 	// update_monitor
 	s.AddTool(
 		newTool("update_monitor",
-			mcp.WithDescription("Update an existing LastPing monitor's schedule/config by UUID using merge-patch semantics: "+
-				"only the fields you supply are changed, and any field you omit keeps its current stored value. "+
-				"If supplied, tags replaces the full tag set on the monitor (not merged). slug is immutable and cannot be changed. "+
-				"This is also the tool that sets a monitor's OUTPUT ASSERTIONS (the assertions argument) — conditions the ping body of a successful "+
-				"run must satisfy, which is how a job that exits zero having done nothing gets caught — and its METRIC GUARDS (the guards argument) — "+
-				"ceilings on a number the job reports, which is how an agent that loops and burns money gets caught. "+
-				"Like tags, assertions and guards each REPLACE the full set. "+
-				"ci_provider is NOT patchable — it is immutable once set, so only its ci_workflow/ci_branch filters can be changed here; "+
-				"rebinding a monitor to a different CI system means deleting and recreating it."),
+			mcp.WithDescription("Updates a monitor by UUID with merge-patch semantics: supplied fields change, omitted fields keep their stored value. "+
+				"tags, assertions (conditions a successful run's ping body has to satisfy, which catch a job that exits 0 having done nothing) and "+
+				"guards (ceilings on a number the job reports, which catch a looping agent) each replace the whole set; get_monitor returns the current sets. "+
+				"slug and ci_provider are immutable; only the ci_workflow and ci_branch filters change here."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),
 			mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable monitor name.")),
-			mcp.WithString("schedule_kind", mcp.Description("'simple', 'cron', or 'on_demand'. NOT ACCEPTED on an http monitor, together with period_s, "+
-				"cron_expr and tz: its schedule is derived from probe_interval_s, so the API refuses all four with 400 FIELD_NOT_IN_SHAPE. "+onDemandTradeoffDesc)),
+			mcp.WithString("schedule_kind", mcp.Description("'simple', 'cron' or 'on_demand'. Not accepted on an http monitor, and neither are period_s, "+
+				"cron_expr and tz: its schedule comes from probe_interval_s (400 FIELD_NOT_IN_SHAPE). "+onDemandTradeoffDesc)),
 			mcp.WithNumber("period_s", mcp.Description("Ping interval in seconds (for schedule_kind='simple').")),
 			mcp.WithString("cron_expr", mcp.Description("5-field cron expression (for schedule_kind='cron').")),
 			mcp.WithString("tz", mcp.Description("IANA timezone for cron evaluation.")),
 			mcp.WithNumber("grace_s", mcp.Description("Grace period in seconds.")),
-			mcp.WithNumber("failure_threshold", mcp.Description(failureThresholdDesc+" Omit to leave the monitor's current threshold unchanged.")),
+			mcp.WithNumber("failure_threshold", mcp.Description(failureThresholdDesc+" Omitted: unchanged.")),
 			mcp.WithNumber("max_runtime_s", mcp.Description(maxRuntimeDesc+
-				" Omit to leave the monitor's current value unchanged; pass 0 to clear it and fall back to grace_s.")),
+				" Omitted: unchanged; 0 clears it (falls back to grace_s).")),
 			mcp.WithNumber("step_timeout_s", mcp.Description(stepTimeoutDesc+
-				" Omit to leave the monitor's current value unchanged; pass 0 to clear it and disable stall detection.")),
+				" Omitted: unchanged; 0 clears it and turns stall detection off.")),
 			mcp.WithNumber("blocked_timeout_s", mcp.Description(blockedTimeoutDesc+
-				" Omit to leave the monitor's current value unchanged; pass 0 to clear it and fall back to the 24h default.")),
+				" Omitted: unchanged; 0 clears it (the 24h default applies).")),
 			mcp.WithNumber("expect_every_s", mcp.Description(expectEveryDesc+
-				" Omit to leave the monitor's current value unchanged; pass 0 to clear it and turn the silence floor off.")),
+				" Omitted: unchanged; 0 clears it and turns the silence floor off.")),
 			mcp.WithNumber("notify_min_run_s", mcp.Description(notifyMinRunDesc+
-				" Omit to leave the monitor's current value unchanged; pass 0 to clear it and turn the notification duration floor off.")),
+				" Omitted: unchanged; 0 clears it and turns the floor off.")),
 			mcp.WithNumber("runaway_ceiling", mcp.Description(runawayCeilingDesc+
-				" Omit to leave the monitor's current value unchanged; pass 0 to clear it and turn the runaway rule off.")),
+				" Omitted: unchanged; 0 clears it and turns the runaway rule off.")),
 			mcp.WithString("monitor_from", mcp.Description(monitorFromDesc+
-				" Omit to leave the monitor's current value unchanged.")),
-			mcp.WithString("probe_url", mcp.Description(probeURLDesc+" Omit to leave unchanged.")),
-			mcp.WithNumber("probe_interval_s", mcp.Description(probeIntervalDesc+" Omit to leave unchanged.")),
-			mcp.WithString("probe_method", mcp.Description(probeMethodDesc+" Omit to leave unchanged.")),
-			mcp.WithNumber("probe_expected_status", mcp.Description(probeExpectedStatusDesc+" Omit to leave unchanged.")),
+				" Omitted: unchanged.")),
+			mcp.WithString("probe_url", mcp.Description(probeURLDesc+" Omitted: unchanged.")),
+			mcp.WithNumber("probe_interval_s", mcp.Description(probeIntervalDesc+" Omitted: unchanged.")),
+			mcp.WithString("probe_method", mcp.Description(probeMethodDesc+" Omitted: unchanged.")),
+			mcp.WithNumber("probe_expected_status", mcp.Description(probeExpectedStatusDesc+" Omitted: unchanged.")),
 			mcp.WithString("probe_expected_body", mcp.Description(probeExpectedBodyDesc+
-				" Omit to leave unchanged; pass an explicit JSON null to stop inspecting the body. An empty string leaves it unchanged, so it cannot be cleared that way.")),
-			mcp.WithNumber("probe_timeout_s", mcp.Description(probeTimeoutDesc+" Omit to leave unchanged.")),
-			mcp.WithBoolean("probe_follow_redirects", mcp.Description(probeFollowRedirectsDesc+" Omit to leave unchanged; pass false to turn following back off.")),
+				" Omitted or an empty string: unchanged; an explicit JSON null stops inspecting the body.")),
+			mcp.WithNumber("probe_timeout_s", mcp.Description(probeTimeoutDesc+" Omitted: unchanged.")),
+			mcp.WithBoolean("probe_follow_redirects", mcp.Description(probeFollowRedirectsDesc+" Omitted: unchanged; false turns following back off.")),
 			mcp.WithString("ci_workflow", mcp.Description(ciWorkflowDesc+
-				" Omit to leave the current filter unchanged; pass an explicit JSON null to remove it. An EMPTY STRING also leaves it unchanged — "+
-				"that is a deliberate API compatibility rule, not a bug, so an empty string cannot be used to clear the filter.")),
+				" Omitted or an empty string (an API compatibility rule): unchanged; an explicit JSON null removes the filter.")),
 			mcp.WithString("ci_branch", mcp.Description(ciBranchDesc+
-				" Omit to leave the current filter unchanged; pass an explicit JSON null to remove it. An EMPTY STRING also leaves it unchanged — "+
-				"that is a deliberate API compatibility rule, not a bug, so an empty string cannot be used to clear the filter.")),
+				" Omitted or an empty string (an API compatibility rule): unchanged; an explicit JSON null removes the filter.")),
 			mcp.WithString("tags", mcp.Description("Comma-separated labels to set on this monitor, e.g. 'agent:claude,env:prod'. Replaces existing tags. Max 20 tags, each max 50 chars.")),
-			mcp.WithString("agent_id", mcp.Description(agentIDDesc+" Omit to leave the monitor's current attachment (or lack of one) unchanged.")),
+			mcp.WithString("agent_id", mcp.Description(agentIDDesc+" Omitted: the current attachment (or lack of one) is unchanged.")),
 			mcp.WithString("assertions", mcp.Description(assertionsDesc)),
 			mcp.WithString("guards", mcp.Description(guardsDesc)),
 			mcp.WithString("trace_content", mcp.Enum("dropped", "redacted"), mcp.Description(traceContentDesc+
-				" Omit to leave the monitor's current value unchanged.")),
+				" Omitted: unchanged.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -525,8 +457,11 @@ func registerCheckTools(s *server.MCPServer) {
 	// delete_monitor
 	s.AddTool(
 		newTool("delete_monitor",
-			mcp.WithDescription("Permanently delete a LastPing monitor by UUID. This cannot be undone."),
-			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID."))),
+			mcp.WithDescription("Permanently deletes a monitor by UUID; this cannot be undone. "+
+				"Its pings, run steps, traces, incidents, routes, alert templates, assertions and delivery history are deleted with it, "+
+				"and the ingest keys bound to it (from create_ingest_key) are deleted too, so they stop working."),
+			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),
+		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
 			if err != nil {
@@ -543,8 +478,9 @@ func registerCheckTools(s *server.MCPServer) {
 	// pause_monitor
 	s.AddTool(
 		newTool("pause_monitor",
-			mcp.WithDescription("Pause a LastPing monitor so it stops alerting (paused=true). The monitor still receives pings but does not alert."),
-			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID."))),
+			mcp.WithDescription("Pauses a monitor (paused=true): it still receives pings but raises no alert."),
+			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),
+		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
 			if err != nil {
@@ -561,8 +497,9 @@ func registerCheckTools(s *server.MCPServer) {
 	// resume_monitor
 	s.AddTool(
 		newTool("resume_monitor",
-			mcp.WithDescription("Resume a paused LastPing monitor (paused=false). Alerting resumes on the next missed ping."),
-			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID."))),
+			mcp.WithDescription("Resumes a paused monitor (paused=false); alerting resumes from the next missed ping."),
+			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),
+		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
 			if err != nil {
@@ -579,13 +516,11 @@ func registerCheckTools(s *server.MCPServer) {
 	// snooze_monitor
 	s.AddTool(
 		newTool("snooze_monitor",
-			mcp.WithDescription("Set or clear a maintenance window on a monitor. The window holds deadline incidents (a missed or never-started run, an overrun, a stall, and a blocked run outliving blocked_timeout_s) and, on an HTTP monitor, failing probes: those are recorded but open no incident, and a site still failing when the window ends opens one on its next failure (on an HTTP monitor, any fail is treated as a probe's). "+
-				"Everything the job reports itself still notifies: its own fail ping, the page a blocked ping queues, a runaway ping rate, and any routed note, started, success or every-run event. "+
-				"Provide exactly one of: duration (e.g. '1h', '24h'), until (RFC 3339 timestamp), or clear=true to remove the window."),
+			mcp.WithDescription(snoozeMonitorDesc),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),
-			mcp.WithString("duration", mcp.Description("Go duration string, e.g. '1h' or '24h'. Use this OR until OR clear.")),
-			mcp.WithString("until", mcp.Description("RFC 3339 end timestamp. Use this OR duration OR clear.")),
-			mcp.WithBoolean("clear", mcp.Description("Set true to remove the active maintenance window.")),
+			mcp.WithString("duration", mcp.Description("Go duration string, e.g. '1h' or '24h'. One of duration, until or clear.")),
+			mcp.WithString("until", mcp.Description("RFC 3339 end timestamp. One of duration, until or clear.")),
+			mcp.WithBoolean("clear", mcp.Description("true removes the active maintenance window.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -1165,6 +1100,19 @@ func (c *APIClient) snoozeMonitor(ctx context.Context, id string, req mcp.CallTo
 	if len(body) == 0 {
 		return mcp.NewToolResultError("Provide exactly one of: duration (e.g. '1h'), until (RFC 3339 timestamp), or clear=true."), nil
 	}
+	// The description says "exactly one"; the API would silently pick one by
+	// precedence (clear, then until, then duration), so more than one is
+	// refused here rather than sent.
+	if len(body) > 1 {
+		named := make([]string, 0, len(body))
+		for _, k := range []string{"duration", "until", "clear"} {
+			if _, ok := body[k]; ok {
+				named = append(named, k)
+			}
+		}
+		return mcp.NewToolResultError("Provide exactly one of: duration, until, or clear=true; this call set " +
+			strings.Join(named, " and ") + "."), nil
+	}
 
 	data, _ := json.Marshal(body)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/api/v1/checks/"+id+"/snooze", bytes.NewReader(data))
@@ -1186,9 +1134,33 @@ func (c *APIClient) snoozeMonitor(ctx context.Context, id string, req mcp.CallTo
 		return mcp.NewToolResultError(c.problem(resp).Error()), nil
 	}
 
-	var ch Check
+	// Decoded locally rather than through Check, so the snooze answer can
+	// name the window's end without adding maintenance_until to every other
+	// tool's monitor payload.
+	var ch struct {
+		Status           string  `json:"status"`
+		MaintenanceUntil *string `json:"maintenance_until"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&ch); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to decode response: %v", err)), nil
 	}
+	if body["clear"] == true {
+		return mcp.NewToolResultText(fmt.Sprintf("Maintenance window cleared on monitor %s (status=%s).", id, ch.Status)), nil
+	}
+	if ch.MaintenanceUntil != nil && *ch.MaintenanceUntil != "" {
+		return mcp.NewToolResultText(fmt.Sprintf("Maintenance window set on monitor %s until %s (status=%s).", id, *ch.MaintenanceUntil, ch.Status)), nil
+	}
 	return mcp.NewToolResultText(fmt.Sprintf("Maintenance window set on monitor %s (status=%s).", id, ch.Status)), nil
 }
+
+// snoozeMonitorDesc says exactly what a maintenance window holds and what
+// still notifies. Deadline incidents are held while a monitor is snoozed, and
+// on an HTTP monitor every fail is treated as a probe's and held too; the
+// job's own fail ping elsewhere, the page a blocked ping queues, a runaway
+// ping rate and every routed info event still notify. Matches the hosted
+// server at mcp.lastping.dev verbatim.
+const snoozeMonitorDesc = "Sets or clears a maintenance window on a monitor. During it, deadline incidents (a missed or never-started run, an overrun, a stall, " +
+	"a blocked run outliving blocked_timeout_s) and, on an HTTP monitor, failing probes (any fail there counts as a probe's) are recorded but open no incident; " +
+	"a site still failing afterwards opens one on its next failure. " +
+	"Still notified: the job's own fail ping, the page a blocked ping queues, a runaway ping rate, and routed note, started, success and every-run events. " +
+	"Takes exactly one of duration, until or clear=true."

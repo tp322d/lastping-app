@@ -42,38 +42,24 @@ type runExpectationDeclaration struct {
 }
 
 // declareRunExpectationsDesc is the `assertions` argument's description.
-const declareRunExpectationsDesc = "The run's complete set of expectations, declared ONCE at the start of the run -- criteria the ping BODY of " +
-	"THIS run's eventual success ping must satisfy when the run closes, checked instead of letting the run grade itself. " +
-	"IMMUTABLE: a second call for the same rid is rejected with a conflict error and the first declaration stands unchanged -- there is no way " +
-	"to edit, add to, or replace it once made, so decide the whole set before you start work. Declaring nothing is allowed and always has been: " +
-	"simply never call this tool for a run, and the monitor's own check-level assertions (if any) stay in force unchanged. " +
-	"INCLUDE AT LEAST ONE POSITIVE CRITERION -- a 'contains', 'matches' or 'json_path' entry -- in every declaration. A declaration made ENTIRELY " +
-	"of 'not_contains' entries is self-satisfying on empty output: a run that produces nothing at all still passes, because there is nothing for " +
-	"the pattern to find. That is precisely the evasion this feature exists to close, so a purely negative declaration defeats its own purpose. " +
-	"A 'matches' entry only counts as positive if its pattern REJECTS an empty body: '.*', '(?s).*' and '^$' all accept one and are validated as " +
-	"perfectly legal patterns, so a declaration resting on one of those is no better than a purely negative declaration. " +
-	"Supply a JSON ARRAY as a string, e.g. " +
+const declareRunExpectationsDesc = "The run's complete criteria, as a JSON array string, e.g. " +
 	`'[{"kind":"json_path","path":"result.rows_processed","op":"gt","value":"0"}]'` + ". " +
-	"Fields per entry: kind (required), value, path, op -- no name; a run's declared criteria have none, unlike a monitor's own output assertions. " +
-	"kind is one of 'contains' (body contains value as a substring), 'not_contains' (body does not contain it), " +
-	"'matches' (body matches value as a Go RE2 regexp, max 1000 bytes), or 'json_path' (parse the body as JSON, read the value at path, compare it against value with op). " +
-	"contains/not_contains/matches require value; json_path requires path and op. " +
-	"path is a DOTTED path only ('a.b.c') -- the query syntax of a real JSONPath library ('[', '*', '$') is rejected. " +
-	"op is one of 'eq', 'ne', 'gt', 'gte', 'lt', 'lte'. " +
-	"At most 20 assertions per run. A malformed entry (uncompilable regexp, a path carrying query syntax, an unknown kind or op) is rejected " +
-	"before anything is written, and nothing is stored if any entry fails."
+	"Fields: kind (required), value, path, op; no name. kind: contains, not_contains, matches (RE2, max 1000 bytes) or " +
+	"json_path (the value at a dotted path, e.g. 'a.b.c', compared with op: eq, ne, gt, gte, lt, lte). " +
+	"Only not_contains entries, or a matches pattern that accepts an empty body ('.*', '^$'), pass on empty output; " +
+	"a contains, json_path or empty-rejecting matches entry catches a run that produced nothing. " +
+	"At most 20; one malformed entry rejects the whole declaration. Runs with no declaration keep the monitor's own assertions."
 
 // registerRunExpectationTools registers declare_run_expectations.
 func registerRunExpectationTools(s *server.MCPServer) {
 	s.AddTool(
 		newTool("declare_run_expectations",
-			mcp.WithDescription("Commit, at the START of a run, to the criteria by which THAT RUN will be judged when it closes — before you can "+
-				"see how it turns out. This is how a run stops grading itself: once declared, a success ping whose body does not satisfy every "+
-				"declared criterion is recorded as a FAILED run with cause 'assertion', regardless of the exit code or what the ping claims. "+
-				"Call this right after your run's /start ping, before doing any work — see the assertions argument for the full, immutable "+
-				"contract, and get_ping_instructions' expectations_how_to for a worked example."),
+			mcp.WithDescription("Declares, at the start of a run, the criteria its success ping body is judged by when the run closes, so the run does not grade itself: "+
+				"a success whose body fails any declared criterion is recorded as a failed run with cause 'assertion', whatever the exit code. "+
+				"One declaration per rid, immutable (a second call is a conflict). For use right after the run's /start ping; "+
+				"get_ping_instructions' expectations_how_to has a worked example."),
 			mcp.WithString("check_id", mcp.Required(), mcp.Description("Monitor UUID (from create_monitor or list_monitors).")),
-			mcp.WithString("rid", mcp.Required(), mcp.Description("The run id exactly as sent on this run's /start ping — the same rid used on every step and the terminal ping.")),
+			mcp.WithString("rid", mcp.Required(), mcp.Description("The run id exactly as sent on this run's /start ping, the same rid used on every step and the terminal ping.")),
 			mcp.WithString("assertions", mcp.Required(), mcp.Description(declareRunExpectationsDesc)),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

@@ -46,22 +46,14 @@ type assertionsEnvelope struct {
 // constant so update_monitor's parameter text and any future tool that accepts
 // the same argument cannot drift into two accounts of replace-the-set
 // semantics.
-const assertionsDesc = "Output assertions: conditions the ping BODY of a successful run must satisfy, checked on every success ping. " +
-	"This is how you catch the job that exits zero having done nothing — a backup that wrote no rows, an export that produced an empty file. " +
-	"When an assertion fails, the success ping opens an incident with cause 'assertion' naming the assertion that did not hold, exactly as a real failure would. " +
-	"Supply a JSON ARRAY as a string, e.g. " +
+const assertionsDesc = "Output assertions: conditions a successful run's ping body has to satisfy; " +
+	"one that fails opens an incident with cause 'assertion' naming it. " +
+	"A JSON array as a string, e.g. " +
 	`'[{"name":"rows written","kind":"json_path","path":"result.rows_processed","op":"gt","value":"0"}]'` + ". " +
-	"REPLACE-THE-SET: the array you send becomes the monitor's complete assertion set — it is NOT merged with what is already there. " +
-	"Omit the argument entirely to leave the current assertions untouched; pass '[]' to remove all of them. " +
-	"Fields per entry: name (required, appears in the alert), kind (required), value, path, op. " +
-	"kind is one of 'contains' (body contains value as a substring), 'not_contains' (body does not contain it), " +
-	"'matches' (body matches value as a Go RE2 regexp, max 1000 bytes), or 'json_path' (parse the body as JSON, read the value at path, compare it against value with op). " +
-	"contains/not_contains/matches require value; json_path requires path and op and ignores them otherwise. " +
-	"path is a DOTTED path only ('a.b.c') — the query syntax of a real JSONPath library ('[', '*', '$') is rejected. " +
-	"op is one of 'eq', 'ne', 'gt', 'gte', 'lt', 'lte'. " +
-	"Comparison rule for json_path: when BOTH the value read from the body and the value you supplied parse as numbers the comparison is numeric, otherwise both sides are compared as strings — " +
-	"so with op 'gt', value '3' beats '12.5' lexically but loses numerically, and 'rows_processed gt 0' means what it looks like it means. " +
-	"At most 20 assertions per monitor. A malformed entry (uncompilable regexp, a path carrying query syntax, an unknown kind or op) is rejected before anything is written and names the offending assertion."
+	"The array replaces the whole set; '[]' removes all, omitted leaves it. " +
+	"Fields: name, kind (both required), value, path, op. kind: contains, not_contains, matches (RE2, max 1000 bytes) or " +
+	"json_path (compares the value at a dotted path, e.g. 'a.b.c', with op: eq, ne, gt, gte, lt, lte; numeric when both sides are numbers, otherwise compared as strings). " +
+	"At most 20; a malformed entry is rejected by name; the set stays as is."
 
 // parseAssertionsArg decodes the `assertions` tool argument.
 //

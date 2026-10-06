@@ -43,20 +43,19 @@ func registerStatusPageTools(s *server.MCPServer) {
 	// an agent could get badly wrong here — publishing monitor names to the
 	// open internet — cannot be described two different ways.
 	const statusPageVisibilityDesc = "'private' (default) or 'public'. " +
-		"'public' means the page is served at a guessable-free but UNAUTHENTICATED URL: anyone with the link sees the title, the name of every monitor on it, " +
-		"and its up/down history. Monitor names are frequently internal ('billing-reconciler', 'acme-corp-nightly-sync'), so treat this as publishing them. " +
-		"Choose 'private' unless the user has actually asked for a page other people can see. " +
-		"The free tier allows exactly ONE public page per project; a second returns 403."
+		"A public page is served at an unguessable but unauthenticated URL: anyone with the link sees the title, every monitor's name " +
+		"(often internal, such as 'billing-reconciler') and its up/down history. " +
+		"The free tier allows one public page per project; a second returns 403."
 
-	const statusPageCheckIDsDesc = "Comma-separated monitor UUIDs to show on the page, in no particular order. Get them from list_monitors. " +
-		"Every id must belong to this project — an unknown or cross-project id returns 400 and nothing is saved. " +
-		"An empty value is legal and produces a page with no monitors on it."
+	const statusPageCheckIDsDesc = "Comma-separated monitor UUIDs to show on the page, in no particular order, from list_monitors. " +
+		"Every id has to belong to this project: an unknown or cross-project id returns 400 and nothing is saved. " +
+		"An empty value is legal and produces a page with no monitors."
 
 	s.AddTool(
 		newTool("list_status_pages",
-			mcp.WithDescription("List the project's status pages: id, slug, title, the monitors on each, visibility, and the public URL of any public page. "+
-				"A status page is how a monitor's health is shown to people who are not in the project — customers, or another team. "+
-				"This is also the read you need before update_status_page, because its check_ids REPLACE the page's monitor set."),
+			mcp.WithDescription("Lists the project's status pages: id, slug, title, the monitors on each, visibility, and the public URL of any public page. "+
+				"A status page shows a monitor's health to people outside the project, such as customers or another team. "+
+				"update_status_page's check_ids replaces a page's monitor set, and this result holds the current set."),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -69,16 +68,14 @@ func registerStatusPageTools(s *server.MCPServer) {
 
 	s.AddTool(
 		newTool("create_status_page",
-			mcp.WithDescription("Create a status page — a single page showing the current status and recent history of a chosen set of monitors. "+
-				"Reach for this when the health of a monitor needs to be visible to someone who cannot log in to the project. "+
-				"Pages are PRIVATE unless you ask for otherwise; read the visibility parameter before making one public."),
+			mcp.WithDescription("Creates a status page: one page showing the current status and recent history of a chosen set of monitors, "+
+				"for people who cannot log in to the project. Pages are private unless visibility is 'public', which publishes every monitor name on the page."),
 			mcp.WithString("title", mcp.Required(), mcp.Description("Human-readable page title, e.g. 'Acme API Status'. Shown at the top of the page, and to anyone the page is shared with.")),
 			mcp.WithString("check_ids", mcp.Description(statusPageCheckIDsDesc)),
 			mcp.WithString("visibility", mcp.Description(statusPageVisibilityDesc)),
-			mcp.WithString("slug", mcp.Description("Optional URL slug, which is what appears in the public link (/status/<slug>). "+
-				"Must match ^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$ (3-50 chars, lowercase alphanumeric and hyphens, starting and ending alphanumeric). "+
-				"Slugs are GLOBALLY unique across all projects, not just yours, so a desirable one may be taken — that returns 409. "+
-				"OMIT IT unless the user asked for a specific URL: a random unguessable slug is then generated, which is also the safer default for a public page.")),
+			mcp.WithString("slug", mcp.Description("Optional URL slug, shown in the public link (/status/<slug>). "+
+				"Has to match ^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$ (3-50 chars, lowercase alphanumeric and hyphens). "+
+				"Slugs are unique across all projects, so a taken one returns 409. Omitted: a random unguessable slug, the safer default for a public page.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -91,18 +88,17 @@ func registerStatusPageTools(s *server.MCPServer) {
 
 	s.AddTool(
 		newTool("update_status_page",
-			mcp.WithDescription("Update a status page's title, slug, visibility, or the set of monitors on it. Only the arguments you pass are changed; "+
-				"anything you omit keeps its current value (this tool reads the page first and merges, so omitting check_ids can never blank the page). "+
-				"check_ids, when you DO pass it, REPLACES the whole monitor set — to add one monitor, pass the existing ids plus the new one, "+
-				"which list_status_pages gives you. Changing the slug changes the public URL and BREAKS any link already shared."),
+			mcp.WithDescription("Updates a status page's title, slug, visibility or monitor set; arguments not supplied keep their value "+
+				"(the tool reads the page and merges, so an omitted check_ids never blanks it). A supplied check_ids replaces the whole monitor set; "+
+				"list_status_pages returns the current ids. A new slug changes the public URL and breaks links already shared."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Status page UUID, from list_status_pages.")),
-			mcp.WithString("title", mcp.Description("New page title. Omit to leave unchanged.")),
+			mcp.WithString("title", mcp.Description("New page title. Omitted: unchanged.")),
 			mcp.WithString("check_ids", mcp.Description(statusPageCheckIDsDesc+
-				" REPLACES the page's whole monitor set. Omit to leave the current set alone.")),
+				" Replaces the page's whole monitor set. Omitted: unchanged.")),
 			mcp.WithString("visibility", mcp.Description(statusPageVisibilityDesc+
-				" Omit to leave unchanged. Switching a page from private to public publishes every monitor name already on it.")),
-			mcp.WithString("slug", mcp.Description("New URL slug. Omit to leave unchanged — which is almost always right, because changing it breaks every link "+
-				"already handed out. Same format rules and same global uniqueness as on create; a taken slug returns 409.")),
+				" Omitted: unchanged. Switching to 'public' publishes every monitor name already on the page.")),
+			mcp.WithString("slug", mcp.Description("New URL slug. Omitted: unchanged. A change breaks every link already handed out. "+
+				"Same format and global uniqueness as on create; a taken slug returns 409.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -119,9 +115,8 @@ func registerStatusPageTools(s *server.MCPServer) {
 
 	s.AddTool(
 		newTool("delete_status_page",
-			mcp.WithDescription("Permanently delete a status page. This cannot be undone, and any public URL it had stops working immediately. "+
-				"The monitors on the page are NOT affected — they keep running and alerting exactly as before; only the shared view of them is removed. "+
-				"To stop sharing without losing the page, set visibility to 'private' with update_status_page instead."),
+			mcp.WithDescription("Permanently deletes a status page; cannot be undone, and its public URL stops working immediately. "+
+				"The monitors on it are unaffected and keep running and alerting. update_status_page with visibility 'private' stops sharing without deleting."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Status page UUID, from list_status_pages.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

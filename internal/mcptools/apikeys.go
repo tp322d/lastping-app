@@ -63,32 +63,24 @@ func registerAPIKeyTools(s *server.MCPServer) {
 	registerRegenerateAPIKeyTool(s)
 	s.AddTool(
 		newTool("create_api_key",
-			mcp.WithDescription("Create a new LastPing API key. The plaintext key is returned "+
-				"ONCE and cannot be retrieved again — store it immediately in a secret manager. "+
-				"Set expires_at for a short-lived key. To give an exporter a tracing key for one monitor, "+
-				"use create_ingest_key instead: it needs only a write key."),
+			mcp.WithDescription("Creates an API key. The plaintext key appears only in this result and cannot be retrieved again. "+
+				"expires_at makes a short-lived key. create_ingest_key, which needs only the write scope, mints a single-monitor tracing key."),
 			mcp.WithString("name", mcp.Required(),
 				mcp.Description("Label for the key, e.g. \"github-actions\".")),
 			mcp.WithString("expires_at",
 				mcp.Description("Optional RFC 3339 expiry, e.g. \"2026-12-31T00:00:00Z\". "+
-					"Omit for a 90-day key, capped at the creating key's own expiry. "+
-					"A key can never be given a longer life than the key that creates it.")),
+					"Omitted: 90 days. Either way it is capped at the creating key's own expiry.")),
 			mcp.WithString("scope",
 				mcp.Enum("read", "write", "admin", "ingest"),
-				mcp.Description("What the new key may do. \"read\" is every GET; \"write\" is "+
-					"everything except managing API keys; \"admin\" is everything, key "+
-					"management included. Omit for \"write\", which is the right tier for a "+
-					"credential handed to a job or an agent: it can do the work and cannot "+
-					"mint itself a replacement. A key can never be given a HIGHER scope than "+
-					"the key that creates it; asking for one is refused and the refusal names "+
-					"the ceiling. \"ingest\" can only send pings and telemetry (traces, "+
-					"metrics, logs) and cannot call the REST API at all: use it for a key that "+
-					"lives in a dotfile or an exporter's config. This tool needs an admin key; "+
-					"with a write key, use create_ingest_key, which mints a tracing key bound to one monitor.")),
+				mcp.Description("What the new key may do. \"read\" is every GET; \"write\" (the default) is "+
+					"everything except managing API keys, so a key at that tier cannot mint itself a replacement; "+
+					"\"admin\" is everything. A scope above the creating key's is refused, and the refusal names the ceiling. "+
+					"\"ingest\" only sends pings and telemetry (traces, metrics, logs) and cannot call the REST API, "+
+					"for a key kept in a dotfile or an exporter's config.")),
 			mcp.WithString("check_id",
 				mcp.Description("Only with scope \"ingest\": binds the key to this one monitor (UUID from "+
-					"list_monitors), so it can send telemetry for that monitor and nothing else. "+
-					"Required for an exporter that cannot name its monitor, such as Codex.")),
+					"list_monitors), so it sends telemetry for that monitor alone. "+
+					"An exporter that cannot name its monitor, such as Codex, needs it.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -105,18 +97,11 @@ func registerAPIKeyTools(s *server.MCPServer) {
 
 	s.AddTool(
 		newTool("list_api_keys",
-			mcp.WithDescription("List all API keys in the project. Never returns plaintext key "+
-				"values — only the non-secret prefix, which is enough to identify a key for "+
-				"revoke_api_key. Each key includes last_used_at and last_used_surface (which "+
-				"client — \"mcp\", \"terraform\", or \"api\" — most recently authenticated with "+
-				"it), both absent if the key has never been used, plus scope (\"read\", "+
-				"\"write\" or \"admin\" — what the key is permitted to do) and "+
-				"created_by_key_id (which key minted it, absent for a key made in the "+
-				"dashboard; revoking a key also revokes every key below it in that chain). "+
-				"last_used_surface is best-effort client self-identification from a "+
-				"caller-controlled, spoofable User-Agent header: useful for answering "+
-				"\"did my client ever successfully authenticate?\", never a basis for trust "+
-				"or authorization decisions.")),
+			mcp.WithDescription("Lists the project's API keys without plaintext values. Each has its non-secret prefix, scope (read, write or admin), "+
+				"created_by_key_id (the key that minted it, absent for a dashboard key; revoking a key revokes every key below it), "+
+				"last_used_at and last_used_surface (mcp, terraform or api; both absent when never used). "+
+				"last_used_surface comes from the caller-controlled User-Agent header: a hint, not proof of identity."),
+		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
 			if err != nil {
@@ -128,14 +113,10 @@ func registerAPIKeyTools(s *server.MCPServer) {
 
 	s.AddTool(
 		newTool("revoke_api_key",
-			mcp.WithDescription("Permanently revoke an API key AND every key it created, "+
-				"recursively: the keys that key made, the keys those keys made, all the way "+
-				"down. All of them stop authenticating immediately. Revoking cascades because "+
-				"a key that can mint keys would otherwise outlive its own revocation. Check "+
-				"list_api_keys first — created_by_key_id shows which keys hang off this one — "+
-				"because this cannot be undone and may revoke more than one credential."),
+			mcp.WithDescription("Permanently revokes an API key and every key it created, recursively; all of them stop authenticating immediately. "+
+				"This cannot be undone; list_api_keys' created_by_key_id shows which keys a revoke reaches."),
 			mcp.WithString("api_key_id", mcp.Required(),
-				mcp.Description("UUID of the key to revoke. Get it from list_api_keys.")),
+				mcp.Description("UUID of the key to revoke, from list_api_keys.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -162,15 +143,13 @@ func registerAPIKeyTools(s *server.MCPServer) {
 func registerRegenerateAPIKeyTool(s *server.MCPServer) {
 	s.AddTool(
 		newTool("regenerate_api_key",
-			mcp.WithDescription("Replace an API key's secret: a new key with the same name, scope and, for a tracing key, the same "+
-				"monitor is created, and THE OLD KEY STOPS WORKING IMMEDIATELY, in every job, exporter, dotfile and agent that still "+
-				"holds it. If it is the key you are calling with, your next call fails until you switch to the new one. The new key "+
-				"has a NEW id. A key that never expired still never expires; one that had an expiry gets a fresh 90 days, capped at "+
-				"your own key's expiry. Unlike revoke_api_key this does not cascade: keys the old key created keep working. Refused "+
-				"(403, with max_scope) for a key with a higher scope than yours. The plaintext key is returned ONCE and cannot be "+
-				"retrieved again: write it where the old one was used, and never echo it back to the person."),
+			mcp.WithDescription("Replaces an API key's secret: a new key, with a new id and the same name, scope and (for a tracing key) monitor. "+
+				"The old key stops working immediately wherever it is held, including when it is the calling key. "+
+				"No expiry stays no expiry; an expiring key gets a fresh 90 days, capped at the calling key's expiry. "+
+				"Keys the old key created keep working (no cascade). Refused (403, with max_scope) for a key scoped above the caller's. "+
+				"The plaintext key appears only in this result."),
 			mcp.WithString("api_key_id", mcp.Required(),
-				mcp.Description("UUID of the key to regenerate. Get it from list_api_keys.")),
+				mcp.Description("UUID of the key to regenerate, from list_api_keys.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)

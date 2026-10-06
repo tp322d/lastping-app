@@ -31,45 +31,19 @@ import (
 func registerPingTools(s *server.MCPServer, pingHost string) {
 	s.AddTool(
 		newTool("get_ping_instructions",
-			mcp.WithDescription("Get everything needed to make a monitor actually report: the ping URL, copy-paste check-in snippets, and the three "+
-				"MECHANISMS for reporting, returned together. Call this right after create_monitor. "+
-				"CHOOSE BY WHAT THE MONITORED THING IS — read `reporting_options` first and pick by that, rather than defaulting to the raw curl list: "+
-				"`how_to` — the manual protocol — is the UNIVERSAL path: it works in any agent, any language, any tool, with no prerequisite, so it is the "+
-				"default choice for any agent this applies to. Pair it with expect_every_s (the silence floor, set via update_monitor) so an agent that "+
-				"quietly stops reporting opens a detected incident instead of leaving its monitor reading healthy. "+
-				"If you ARE Claude Code specifically, `hook_install` is available as an OPTIONAL SHORTCUT, not a better tier: a one-time install that binds "+
-				"reporting to Claude Code's own hooks (UserPromptSubmit, Stop, StopFailure), automating how_to's exact same protocol so reporting becomes a "+
-				"property of your event loop instead of something you must remember — and it is the only mechanism that can send every state this product "+
-				"models, including blocked and note. Re-running hook_install replaces an older ~/.claude/lastping-report.sh (keeping a .bak), which is how an "+
-				"existing install is upgraded. hook_install is Claude Code specific: if you are a DIFFERENT AI agent — even one with its own hook or "+
-				"event system, Cursor, Windsurf, a custom framework — do NOT translate its steps into your own hooks; the event semantics differ and a "+
-				"translated install can pass its own verification while never reporting, so use `how_to` instead. "+
-				"If you ARE Codex, pass tool \"codex\": `hook_install` is then Codex's own install (a script and three hooks, SessionStart, UserPromptSubmit and Stop, in ~/.codex/hooks.json, "+
-				"trusted by the person in /hooks), and `how_to` says what Codex's sandbox does to pings you send yourself. "+
-				"If you ARE Antigravity CLI (agy), pass tool \"antigravity\": `hook_install` is then a script and three hooks in ~/.gemini/config/hooks.json that report each turn as a run. "+
-				"If what you are monitoring is launched as a command instead — a cron job, a CI step, a script, or an agent started from a shell — use "+
-				"`run_wrapper`: wrap the command with `lastping run` and a separate process reports for you, so nothing has to be remembered; the tradeoff is "+
-				"that it reports the process's own lifecycle (start, success, fail, cancel) and has no way to send blocked or note. "+
-				"Whichever you choose, the underlying protocol is the same: the success ping at the END of the work, the fail URL if it failed, "+
-				"the start ping first for long or possibly-hung runs (this enables overrun / never-finished detection), "+
-				"and a step (curl_step) as each stage completes so a run that wedges mid-way is caught by name rather than only when its whole budget expires. "+
-				"Also read `expectations_how_to`: before you start work, use declare_run_expectations to say how THIS run should be judged when it closes — "+
-				"a one-time, unchangeable commitment that replaces the run grading itself. "+
-				"And `discovery_how_to`, which is about the OTHER jobs on this host or in this repo: how to find the scheduled work nobody is watching yet "+
-				"and propose it, rather than monitoring only the one thing you were asked about. "+
-				"To send OpenTelemetry traces, read `tracing_how_to`, call get_trace_setup with the tool that sends the telemetry and carry "+
-				"its steps out yourself, except the tracing key: the person creates it on the monitor's Connect page and stores it from "+
-				"their own terminal, so you never create, ask for or hold it, and never use your own API key instead. "+
-				"`otel_env_lines` is the minimal form: the `export` lines (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL, "+
-				"OTEL_RESOURCE_ATTRIBUTES, OTEL_EXPORTER_OTLP_HEADERS) to set in the child process's environment so its spans arrive on this "+
-				"monitor; the person puts the tracing key in place of its placeholder, in their own terminal or file, never you (it is not "+
-				"resolved server-side). An exporter that cannot set "+
-				"headers can instead POST straight to `<ping_url>/v1/traces`: the monitor-URL form needs no Authorization header at all, since the monitor "+
-				"id in the URL is itself the capability."),
+			mcp.WithDescription("Returns what a monitor needs in order to report: its ping URLs, copy-paste snippets (curl_success, curl_start, curl_fail, curl_step, run_example) "+
+				"and three reporting mechanisms, for wiring up a new monitor. `reporting_options` holds the rule for choosing between them: "+
+				"`how_to` is the manual protocol and works in any agent with no prerequisite (with expect_every_s, a lapse opens an incident); "+
+				"`hook_install` is a one-time install that automates the same protocol through hooks and alone sends every state, blocked and note included; "+
+				"it is returned only when `tool` is set (claude-code, codex or antigravity), otherwise `hook_install_note` says so; `run_wrapper` puts `lastping run` before a launched command (cron job, CI step, script) "+
+				"and reports start, success, fail and cancel. Also returned: `failure_inbox_how_to`, `expectations_how_to` (declare_run_expectations), "+
+				"`tracing_how_to` (OpenTelemetry, detailed by get_trace_setup), `otel_env_lines`, export lines whose key placeholder stands for the person's tracing key, and `docs_url`. "+
+				"An exporter that cannot set headers can POST to `<ping_url>/v1/traces`, which needs no Authorization header."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID (from create_monitor or list_monitors).")),
 			mcp.WithString("tool",
 				mcp.Enum("claude-code", "codex", "antigravity"),
-				mcp.Description("Which tool's install `hook_install` carries: claude-code (the default), codex or antigravity. Everything else in the result is the same."))),
+				mcp.Description("Which tool's install `hook_install` carries: claude-code, codex or antigravity. `hook_install` is returned only when this is set. Everything else in the result is the same.")),
+		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
 			if err != nil {
@@ -134,7 +108,13 @@ type PingInstructions struct {
 	// every state this product models, including blocked and note. A
 	// different AI agent with its own, differently-shaped hook system must
 	// not translate this into it; that belongs under HowTo instead.
-	HookInstall string `json:"hook_install"`
+	HookInstall string `json:"hook_install,omitempty"`
+	// HookInstallNote and DocsURL exist only on the MCP result (the REST
+	// endpoint does not carry them). hook_install is about 35K characters and
+	// is returned only when the caller names a tool, so the note says why the
+	// field is absent otherwise. Both are facts about this tool.
+	HookInstallNote string `json:"hook_install_note,omitempty"`
+	DocsURL         string `json:"docs_url"`
 	// HowTo is the manual protocol: the UNIVERSAL path, fitting any agent, any
 	// language, any tool, with no prerequisite -- unlike HookInstall (Claude
 	// Code only) or RunWrapper (needs a command to wrap). Paired with
@@ -160,19 +140,11 @@ type PingInstructions struct {
 	// this struct fell out of sync with the API's struct after
 	// FailureInboxHowTo was added there.
 	FailureInboxHowTo string `json:"failure_inbox_how_to"`
-	// DiscoveryHowTo mirrors the API struct's DiscoveryHowTo verbatim: how to
-	// find the scheduled work on this host or in this repo that nobody is
-	// watching yet, and propose it -- a project-scoped instruction served from
-	// a check-scoped payload, because this is the payload an agent already
-	// reads.
-	//
-	// There is no compiler check that this mirror still matches the API's
-	// struct and there cannot be one, since the two live in repositories that
-	// must not share code; the guard is
-	// TestGetPingInstructions_IncludesEveryHowToField, which decodes the
-	// rendered output into a generic map so a dropped field fails on a missing
-	// key rather than passing on both sides equally.
-	DiscoveryHowTo string `json:"discovery_how_to"`
+	// discovery_how_to is deliberately not decoded: the API still serves it
+	// (the console reads it), but this tool omits it from its result. Dropping a
+	// field by not naming it here is the same mechanism that once lost
+	// failure_inbox_how_to by accident; TestGetPingInstructions_OmitsDiscoveryHowTo
+	// pins that this omission is intentional.
 	// OtelTracesEndpoint, OtelResourceAttributes, OtelHeadersHint and
 	// OtelEnvLines mirror the API struct's fields of the same name verbatim:
 	// where to send OpenTelemetry traces for this monitor and the environment
@@ -184,7 +156,7 @@ type PingInstructions struct {
 	OtelHeadersHint        string   `json:"otel_headers_hint"`
 	OtelEnvLines           []string `json:"otel_env_lines"`
 	// TracingHowTo mirrors the API struct's field of the same name, for the
-	// reason DiscoveryHowTo's comment gives: a proxy that decodes into this
+	// reason FailureInboxHowTo's comment gives: a proxy that decodes into this
 	// struct silently drops what it does not name. The per-tool set-up blocks
 	// are get_trace_setup's, not this tool's: carrying all eight here made
 	// every get_ping_instructions call pay for set-up it rarely needs.
@@ -233,6 +205,14 @@ func (c *APIClient) getPingInstructions(ctx context.Context, id, tool, pingHost 
 	if pi.PingURL == "" {
 		pi.PingURL = pingHost + "/" + pi.MonitorID
 	}
+
+	// The REST payload always carries hook_install (the console relies on that
+	// default). The MCP result carries it only when the caller named a tool.
+	if tool == "" {
+		pi.HookInstall = ""
+		pi.HookInstallNote = "Returned when the tool argument names claude-code, codex or antigravity."
+	}
+	pi.DocsURL = "https://lastping.dev/mcp/"
 
 	return mcp.NewToolResultText(marshalSnippets(pi)), nil
 }

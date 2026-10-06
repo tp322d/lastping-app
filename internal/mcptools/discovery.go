@@ -56,61 +56,37 @@ import (
 // stream an unbounded body into the agent's context.
 const maxReconcileResponseBytes = 8 << 20
 
-// discoverReconcileDesc is what an agent reads before deciding whether to
-// call, and it carries three rules that exist nowhere else on this surface:
-// propose before creating, read the host's zone rather than assume one, and
-// reconcile never deletes.
+// discoverReconcileDesc carries three facts that exist nowhere else on this
+// surface: what reconcile creates, that it never deletes, pauses or edits, and
+// which zone each source kind's schedule fires in. They are stated as facts
+// about the tool (directory policy); the propose-before-creating procedure
+// lives in the public lastping-setup skill.
 //
-// The last two are not decoration. The API can require that a tz be STATED for
-// a host-local scanner, but it cannot tell an informed "UTC" from a reflexive
-// one — that gap closes here or not at all. And an agent that suspects a
-// re-run might tear down monitoring will run the scan once, at setup, which
-// turns drift detection back into a setup wizard.
-const discoverReconcileDesc = "Turn a scan of a repository or a host into monitors: send every scheduled job you found, get back a diff of what " +
-	"was created, what already existed and what has gone missing. This is how a user gets monitored without filling in a form. " +
-	"PROPOSE, THEN ASK. Show the user what you found and get their agreement BEFORE calling this — it CREATES monitors. Eleven monitors " +
-	"created on a repository you were asked to look at are eleven things that can page a person at 03:00 and that they never agreed to, " +
-	"and this endpoint has no delete path to undo them with. " +
-	"WHAT TO SEND: a JSON array as a string in `sources`, one entry per job. Each entry needs source_kind and source_ref — that pair is the " +
-	"key this call diffs against, so source_ref must be STABLE between scans; a ref whose shape changes makes every monitor look new and " +
-	"duplicates the whole fleet on the next run. Kinds: 'crontab' (crontab -l, /etc/cron.d/*, /etc/crontab), 'github-actions' " +
-	"(.github/workflows/*.yml, an on.schedule.cron entry), 'k8s-cronjob' (a manifest or Helm template with kind: CronJob and a spec.schedule), " +
-	"'systemd-timer' (/etc/systemd/system/*.timer, an OnCalendar= line). Send schedule_cron only when you actually read a cron expression; a " +
-	"workflow triggered on push has no cadence to be late against, and an invented one pages the user every quiet afternoon. Without it the " +
-	"monitor is created on-demand instead.\n" +
-	"READ THE TIMEZONE, DO NOT ASSUME ONE. crontab and systemd-timer fire in the HOST's local time; github-actions and k8s-cronjob evaluate " +
-	"their schedules in UTC. A 'crontab' or 'systemd-timer' entry carrying a schedule_cron MUST state its tz, and the zone must be READ from " +
-	"the host — `timedatectl show -p Timezone --value`, or `readlink /etc/localtime` where that is unavailable — not filled in as a default. " +
-	"A host at UTC+4 running '0 3 * * *' pings at 23:00 UTC, so a monitor recorded as tz=UTC arms its deadline about twenty hours before the " +
-	"job is due and opens a false incident every single day. The API cannot catch this for you: it requires that a zone be STATED, and a " +
-	"stated 'UTC' from a scanner that read the host is indistinguishable on the wire from a stated 'UTC' a client filled in. Send 'UTC' only " +
-	"when you read the host and it really is UTC. Scanning a REPOSITORY, where there is no host to read, ASK THE USER which zone those " +
-	"machines run in — not knowing is a question to put to them, never a reason to reach for a default.\n" +
-	"WHAT COMES BACK is a three-way diff: `created` (sources that had no monitor and now have one), `existing` (sources already monitored, " +
-	"returned COMPLETELY UNMODIFIED — not the name, not the schedule, not the thresholds, so an expect_every_s the user tuned by hand survives " +
-	"every scan), and `orphaned` (monitors whose source this scan did NOT report). " +
-	"RECONCILE NEVER DELETES, NEVER PAUSES AND NEVER EDITS ANYTHING. There is no delete path and no update path in this endpoint at all, so an " +
-	"orphaned monitor is still running and still alerting; treat that list as a question for the user ('this job is gone, should its monitor " +
-	"go too?'), never as something to act on yourself. " +
-	"BECAUSE OF THAT IT IS SAFE TO RE-RUN, and re-running is the point: run it nightly, on every CI build, after every deploy, and the second " +
-	"run creates only what has appeared since the first while `orphaned` becomes your drift report. A scan that runs once is a setup wizard; a " +
-	"scan that is safe on a schedule is drift detection. " +
-	"Existing monitors already carry source_kind and source_ref in list_monitors, so you can see what is already discovered without calling this."
+// The API can require that a tz be stated for a host-local scanner, but it
+// cannot tell an informed "UTC" from a reflexive one, which is why the zone
+// facts stay in the description.
+const discoverReconcileDesc = "Turns a scan of a repository or host (`sources`, every scheduled job found) into monitors. " +
+	"Creates one monitor per source not already monitored; never deletes, pauses or edits existing monitors, so a scheduled re-run is safe drift detection. " +
+	"Returns `created`, `existing` (unmodified, hand-tuned values intact) and `orphaned` (source not in this scan; still running and alerting). " +
+	"Each created monitor can page a person; this endpoint has no delete path. " +
+	"source_kind plus source_ref is the diff key, so source_ref has to stay stable: a changed ref creates a duplicate; " +
+	"a crontab ref names the file and the command, so each line is its own source. " +
+	"Kinds: 'crontab' (crontab -l, /etc/cron.d/*, /etc/crontab), 'github-actions' (on.schedule.cron), " +
+	"'k8s-cronjob' (spec.schedule), 'systemd-timer' (OnCalendar=). A source without schedule_cron becomes on-demand. " +
+	"crontab and systemd-timer fire in the host's local time (`timedatectl show -p Timezone --value` or `readlink /etc/localtime` prints it); " +
+	"github-actions and k8s-cronjob in UTC. A stated tz is stored as given: the API cannot tell a guessed 'UTC' from one read from the host. " +
+	"list_monitors shows each source."
 
 // discoverReconcileSourcesDesc describes the one argument the tool takes. The
-// rejections named here are 400s an agent cannot anticipate unless it is told.
-const discoverReconcileSourcesDesc = "The complete scan result: a JSON ARRAY supplied as a string, one entry per scheduled job, e.g. " +
-	`'[{"source_kind":"crontab","source_ref":"/etc/cron.d/backup:/usr/local/bin/backup.sh","name":"nightly backup","schedule_cron":"0 3 * * *","tz":"Europe/Berlin"}]'` + ". " +
-	"Fields per entry: source_kind and source_ref (both REQUIRED — an entry missing either cannot be matched against an existing monitor and " +
-	"would be re-created on every scan), name (optional display name; falls back to source_ref), schedule_cron (optional 5-field cron " +
-	"expression, sent only when you actually read one), tz (the IANA zone that cron fires in — REQUIRED for a crontab or systemd-timer entry " +
-	"carrying a schedule_cron, read from the host, never guessed), and suggested_expect_every_s (optional; state the silence floor outright " +
-	"when you know the real cadence better than the cron expression does — it WINS over the value derived from the cron). " +
-	"Send the WHOLE scan in one call: this is a diff, so a source you leave out is reported as orphaned rather than ignored. " +
-	"Send '[]' to report that the scan found nothing — every discovered monitor is then listed as orphaned, and none of them is deleted. " +
-	"At most 1000 entries per call, each source_kind/source_ref pair at most once (a duplicate is rejected outright, not merged), and the " +
-	"project's 100-monitor cap is applied to the whole batch at once — if the batch would exceed it, NOTHING is created. " +
-	"Nothing is written unless every entry validates: one bad entry rejects the entire payload and leaves no monitors behind."
+// rejections named here are 400s that are otherwise unanticipated.
+const discoverReconcileSourcesDesc = "The full scan as a JSON array string, e.g. " +
+	`'[{"source_kind":"crontab","source_ref":"/etc/cron.d/backup:/usr/local/bin/backup.sh","schedule_cron":"0 3 * * *","tz":"Europe/Berlin"}]'` + ". " +
+	"Fields: source_kind, source_ref (required), name (default source_ref), schedule_cron (5-field, when one was read), " +
+	"tz (IANA zone the cron fires in; required on a crontab or systemd-timer entry with schedule_cron), " +
+	"suggested_expect_every_s (overrides the silence floor). " +
+	"An omitted source is reported orphaned; '[]' orphans every discovered monitor, deleting none. " +
+	"At most 1000 entries; a repeated source_kind/source_ref pair is rejected. The 100-monitor cap covers the whole batch; " +
+	"one invalid entry rejects it all."
 
 // reconcileProblemText renders an RFC 7807 rejection from
 // /api/v1/discovery/reconcile, INCLUDING its `fix` field.

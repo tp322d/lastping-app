@@ -94,8 +94,8 @@ type Channel struct {
 func registerChannelTools(s *server.MCPServer) {
 	s.AddTool(
 		newTool("list_destinations",
-			mcp.WithDescription("List all notification destinations (channels) in the project: email, webhook, Slack, Discord, Telegram. "+
-				"Use channel IDs to configure routing rules for monitors.")),
+			mcp.WithDescription("Lists the project's notification destinations (channels) of every kind ("+strings.Join(destinationKinds, ", ")+"). "+
+				"Their ids are what set_route takes.")),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
 			if err != nil {
@@ -107,21 +107,17 @@ func registerChannelTools(s *server.MCPServer) {
 
 	s.AddTool(
 		newTool("create_destination",
-			mcp.WithDescription("Create a notification destination (channel) that monitors can route alerts to. "+
-				"Provide the fields for the chosen kind; unrelated fields are ignored. Non-email kinds are usable "+
-				"immediately; email kinds are created unverified and send a confirmation link that must be clicked "+
-				"before they can be attached to a route. A project holds at most 25 destinations — if creation is "+
-				"refused with DESTINATION_CAP_REACHED, delete one with delete_destination rather than retrying. "+
-				"Returns the new channel id — pass it to set_route."),
+			mcp.WithDescription("Creates a notification destination (channel) that monitors can route alerts to, from the fields of the chosen kind; "+
+				"unrelated fields are ignored. Non-email kinds are usable immediately; an email destination starts unverified, sends a confirmation link, "+
+				"and can join a route once the link is clicked. A project holds at most 25 destinations (DESTINATION_CAP_REACHED beyond that). "+
+				"Returns the new channel id, which set_route takes."),
 			mcp.WithString("kind", mcp.Required(), mcp.Description(
 				"One of: "+strings.Join(destinationKinds, ", ")+". "+
-					"Every destination URL must be https. A BRANDED kind must point at its vendor's host: "+
+					"Every destination URL has to be https, and a branded kind has to point at its vendor's host: "+
 					kindHostPinSentence()+
-					"For any other endpoint use kind \"webhook\", which accepts any https host; ntfy is unpinned too, "+
-					"so a self-hosted ntfy server is fine. A pin narrows the destination to the vendor's own platform; "+
-					"it does NOT prove the endpoint belongs to the person or project that created it, because every "+
-					"pinned domain is multi-tenant and open to anyone who signs up. Do not report a pinned destination as verified or "+
-					"as owned by anyone on the strength of its host.")),
+					"Any other endpoint fits kind \"webhook\", which accepts any https host; ntfy is unpinned too, "+
+					"so a self-hosted ntfy server works. A pin narrows the destination to the vendor's platform; "+
+					"it does not prove who owns the endpoint, since every pinned domain is multi-tenant.")),
 			mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable destination name, e.g. 'On-call Slack'.")),
 			mcp.WithString("url", mcp.Description("webhook: the POST target URL.")),
 			mcp.WithString("secret", mcp.Description("webhook: shared secret used to sign the HMAC-SHA256 payload.")),
@@ -144,21 +140,17 @@ func registerChannelTools(s *server.MCPServer) {
 
 	s.AddTool(
 		newTool("update_destination",
-			mcp.WithDescription("Update a notification destination's name and/or config in place. Only the fields you pass are changed. "+
-				"The destination kind cannot be changed — delete and recreate instead. Changing an email destination's address "+
-				"resets verification and sends a new confirmation email."),
-			mcp.WithString("destination_id", mcp.Required(), mcp.Description("UUID of the destination to update. Get it from list_destinations.")),
-			mcp.WithString("name", mcp.Description("New human-readable label. Omit to leave unchanged.")),
+			mcp.WithDescription("Updates a notification destination's name and/or config in place; only the supplied fields change. "+
+				"The kind cannot change (delete and recreate instead). A new email address resets verification and sends a new confirmation email."),
+			mcp.WithString("destination_id", mcp.Required(), mcp.Description("UUID of the destination to update, from list_destinations.")),
+			mcp.WithString("name", mcp.Description("New human-readable label. Omitted: unchanged.")),
 			mcp.WithObject("config", mcp.Description(
-				"Replacement config for the destination's existing kind — one of "+strings.Join(destinationKinds, ", ")+
-					". Shape must match the kind: {\"url\":…,\"secret\":…} for webhook, "+
+				"Replacement config for the destination's existing kind ("+strings.Join(destinationKinds, ", ")+
+					"), naming only that kind's fields, each once: {\"url\":…,\"secret\":…} for webhook, "+
 					"{\"bot_token\":…,\"chat_id\":…} for telegram, {\"webhook_url\":…} for slack/discord/msteams/googlechat, {\"topic_url\":…} for ntfy, "+
-					"{\"token\":…,\"user_key\":…} for pushover, {\"address\":…} for email. Omit to leave unchanged. "+
-					"A URL you supply is re-checked against the kind's allowed hosts and must be https; a destination "+
-					"created before that rule keeps working until you send a new config for it. The config must name "+
-					"only the fields listed for its kind, each exactly once. The host rule narrows a branded "+
-					"destination to the vendor's own platform; it does NOT prove the endpoint belongs to the person "+
-					"or project that owns the destination.")),
+					"{\"token\":…,\"user_key\":…} for pushover, {\"address\":…} for email. Omitted: unchanged. "+
+					"A supplied URL is re-checked against the kind's allowed hosts and has to be https; a destination created before that rule "+
+					"keeps working until its config is replaced. The host rule does not prove who owns the endpoint.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -181,15 +173,12 @@ func registerChannelTools(s *server.MCPServer) {
 	// only distinguishing feature is which of two sends it performs.
 	s.AddTool(
 		newTool("test_destination",
-			mcp.WithDescription("Send something through a destination right now, to move it from 'created' to 'known to work'. "+
-				"By default it delivers a synthetic 'LastPing test alert' immediately — use that after create_destination to confirm the credentials are right. "+
-				"For an EMAIL destination that is still unverified, a test alert is not what you need: an unverified email cannot be attached to a route at all, "+
-				"and no amount of testing changes that. Pass resend_verification=true instead to re-send the confirmation link a human must click. "+
-				"That is the tool to reach for when create_destination reported UNVERIFIED and the confirmation email never arrived or has expired."),
-			mcp.WithString("id", mcp.Required(), mcp.Description("Destination (channel) UUID. Get it from list_destinations or create_destination.")),
-			mcp.WithBoolean("resend_verification", mcp.Description("Set true to re-send the email confirmation link INSTEAD of a test alert. "+
-				"Email destinations only — any other kind returns 400. Safe to repeat, and idempotent: on an already-verified destination it reports "+
-				"verified and sends nothing rather than mailing the user again.")),
+			mcp.WithDescription("Sends something through a destination now. By default it delivers a synthetic 'LastPing test alert', "+
+				"which confirms a new destination's credentials. With resend_verification=true it instead re-sends an unverified email destination's "+
+				"confirmation link, for when the first one never arrived or expired; an unverified email cannot join a route, and a test alert does not change that."),
+			mcp.WithString("id", mcp.Required(), mcp.Description("Destination (channel) UUID, from list_destinations or create_destination.")),
+			mcp.WithBoolean("resend_verification", mcp.Description("true re-sends the email confirmation link in place of a test alert. "+
+				"Email destinations only (any other kind returns 400). Idempotent: an already-verified destination reports verified and nothing is sent.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
@@ -217,12 +206,10 @@ func registerChannelTools(s *server.MCPServer) {
 	// to remove it.
 	s.AddTool(
 		newTool("delete_destination",
-			mcp.WithDescription("Permanently delete a notification destination (channel). This cannot be undone. "+
-				"It also removes the destination from every monitor's routing — any event type routed ONLY to this destination stops notifying anyone, "+
-				"silently and with no incident to show for it. Before deleting a destination that is in use, check which monitors route to it "+
-				"(get_monitor returns a monitor's `routes`) and give those event types another destination first. "+
-				"To stop using a destination temporarily, prefer editing the routes with set_route and leaving the destination in place."),
-			mcp.WithString("id", mcp.Required(), mcp.Description("Destination (channel) UUID. Get it from list_destinations.")),
+			mcp.WithDescription("Permanently deletes a notification destination (channel); cannot be undone. "+
+				"It is removed from every monitor's routing, so an event type routed only to it stops notifying anyone, with no incident to show for it. "+
+				"get_monitor's `routes` shows which event types route to it, and set_route changes routing without deleting the destination."),
+			mcp.WithString("id", mcp.Required(), mcp.Description("Destination (channel) UUID, from list_destinations.")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)

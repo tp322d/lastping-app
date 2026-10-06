@@ -70,26 +70,15 @@ var traceSetupTools = []string{"claude-code", "codex", "gemini", "antigravity", 
 func registerTraceSetupTools(s *server.MCPServer) {
 	s.AddTool(
 		newTool("get_trace_setup",
-			mcp.WithDescription("Get the exact steps to make a tool send OpenTelemetry traces to LastPing for one monitor: what to write, where, "+
-				"how to verify it, and what that tool cannot do. Call this when a person asks you to set up tracing, observability or telemetry for "+
-				"a project. Carry the steps out yourself rather than printing them: write the files, check they are git ignored, send the test span, "+
-				"and report the console link. Never echo the credential back to the person and never put it in committed code. "+
-				"The result's `prompt` is the full instruction for the tool you name, and each block's `files` are what to write. "+
-				"You never create, ask for or hold the tracing key: the person creates it on the monitor's Connect page and stores it "+
-				"from their own terminal with the block's `key_line`, so the key never enters the chat. For Claude Code and Codex, write the "+
-				"block's `bang_script` and ask the person to review it and run `bang_command` with the tool's ! prefix. Claude Code's merges "+
-				"~/.claude/settings.json and, when the LastPing hook reports for this monitor and python3 works, removes the LastPing reporting "+
-				"block from ~/.claude/CLAUDE.md and from a ./CLAUDE.md outside a git repository, with backups (one inside a git repository "+
-				"is left for the person to edit, and the script says so). If ~/.claude/settings.json already sends Claude Code's telemetry "+
-				"to another LastPing monitor, it changes nothing and exits 6 naming that monitor; move tracing only after the person agrees, "+
-				"with LASTPING_REPLACE=1 before the command. If they keep the other monitor, stop there: no tracing key is stored for this one, "+
-				"and one already stored breaks the other monitor's tracing until its own key is stored again with its own key line. Codex's writes the [otel] block and the stored key into ~/.codex/config.toml, with a backup, "+
-				"and changes nothing when another exporter is configured there. Never open, read or merge ~/.codex/config.toml yourself: "+
-				"it holds keys; check it only with a count such as grep -c."),
+			mcp.WithDescription("Returns the steps that make a tool send OpenTelemetry traces to one monitor: what to write and where, how to verify it, "+
+				"and the tool's limits. For setting up tracing, observability or telemetry. `prompt` is the full set-up procedure for the named tool, "+
+				"credential handling included. Each block has `files`, a `key_line` (the terminal line that stores the tracing key the person creates "+
+				"on the monitor's Connect page) and, for Claude Code and Codex, a reviewable `bang_script` run with `bang_command`."),
 			mcp.WithString("monitor_id", mcp.Required(), mcp.Description("Monitor UUID (from create_monitor or list_monitors).")),
 			mcp.WithString("tool",
 				mcp.Enum(traceSetupTools...),
-				mcp.Description("Which tool will send the traces: claude-code, codex, gemini, antigravity, cursor, python, node, otel-sdk or collector. Omit to get every block."))),
+				mcp.Description("Which tool sends the traces: claude-code, codex, gemini, antigravity, cursor, python, node, otel-sdk or collector. Omitted: every block.")),
+		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
 			if err != nil {
@@ -105,18 +94,14 @@ func registerTraceSetupTools(s *server.MCPServer) {
 
 	s.AddTool(
 		newTool("create_ingest_key",
-			mcp.WithDescription("Create a tracing key for one monitor: an ingest-scoped LastPing key bound to that monitor. It can send traces, metrics, "+
-				"logs and pings for that one monitor and nothing else; it cannot read or change anything in the account, and every REST call refuses it. "+
-				"It is for automation that stores the key itself (a CI secret, a deployment's secret store), not for a person's own machine: "+
-				"get_trace_setup's steps never need you to hold the key, because the person creates it on the monitor's Connect page and "+
-				"stores it from their own terminal. The plaintext key is returned ONCE: write it straight into the secret store or git-ignored file "+
-				"it is for, never into committed code, and never echo it back to the person, in a reply, a commit message or a log. "+
-				"Never use your own LastPing API key as an exporter's credential instead. Omit expires_at for a 90-day key, capped at your own key's expiry. "+
-				"The key is returned into this conversation. For a person's own machine, prefer the console's Create a tracing key and the terminal line it shows, so the key never enters a chat."),
+			mcp.WithDescription("Creates a tracing key: an ingest-scoped key bound to one monitor, able to send traces, metrics, logs and pings for it "+
+				"and nothing else; every REST call refuses it. For automation that stores the key itself (a CI secret, a deployment's secret store). "+
+				"The plaintext key appears only in this result, which puts it in the conversation; the console's Create a tracing key keeps it out of chat."),
 			mcp.WithString("monitor_id", mcp.Required(), mcp.Description("Monitor UUID the key is bound to (from create_monitor or list_monitors).")),
 			mcp.WithString("name", mcp.Description("Optional label for the key. Defaults to \"Tracing:\" followed by the monitor's name.")),
-			mcp.WithString("expires_at", mcp.Description("Optional RFC 3339 expiry, e.g. \"2026-12-31T00:00:00Z\". Omit for a 90-day key, capped at the "+
-				"creating key's own expiry."))),
+			mcp.WithString("expires_at", mcp.Description("Optional RFC 3339 expiry, e.g. \"2026-12-31T00:00:00Z\". Omitted: 90 days. Either way it is capped at the "+
+				"creating key's own expiry.")),
+		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			c, err := clientFromContext(ctx)
 			if err != nil {

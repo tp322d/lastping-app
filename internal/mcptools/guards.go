@@ -45,25 +45,14 @@ type guardsEnvelope struct {
 // replace-the-set semantics. The 5-guard and 604800-second (7-day) caps are
 // restated here as literals rather than imported constants: the API enforces
 // them, this client only documents them.
-const guardsDesc = "Metric guards: CEILINGS on a number the job reports about itself, checked on every ping. " +
-	"An assertion catches a run that did nothing; a guard catches the opposite — an agent that loops, retries and burns money. " +
-	"Each guard reads one number out of the ping body at a dotted path, rolls it up across a trailing window, " +
-	"and opens an incident with cause 'runaway' when the total EXCEEDS the ceiling (equal does not trip). " +
-	"Supply a JSON ARRAY as a string, e.g. " +
+const guardsDesc = "Metric guards: ceilings on a number the job reports, checked on every ping; a total above the ceiling (equal does not trip) opens a 'runaway' incident. " +
+	"A JSON array as a string, e.g. " +
 	`'[{"name":"daily spend","path":"cost.usd","window_s":86400,"ceiling":50,"aggregation":"sum"}]'` + ". " +
-	"REPLACE-THE-SET: the array you send becomes the monitor's complete guard set — it is NOT merged with what is already there. " +
-	"Omit the argument entirely to leave the current guards untouched; pass '[]' to remove all of them. " +
-	"Fields per entry, all required: name (appears on the incident, and is the only thing that tells a tripped guard apart from the " +
-	"fixed pings-per-hour runaway ceiling), path (DOTTED path into the ping body parsed as JSON — 'cost.usd'; the query syntax of a " +
-	"real JSONPath library ('[', '*', '$') is rejected, exactly as for an assertion's path), window_s (trailing window in seconds), " +
-	"ceiling (number), aggregation (one of 'sum', 'max', 'avg'). " +
-	"Pings whose body is missing, is not JSON, or carries nothing numeric at that path are SKIPPED, not counted as zero — " +
-	"so a `start` ping never drags an average down. " +
-	"At most 5 guards per monitor, and window_s at most 604800 seconds (7 days). " +
-	"Both caps are cost, not policy: a guard re-aggregates every ping body in its window on every ping, so the per-ping work is " +
-	"linear in BOTH the window and the number of guards (measured: 4.2 ms/ping at a 1-hour window, 390 ms/ping at 30 days). " +
-	"A window longer than the 90-day ping retention would also aggregate over already-pruned rows and quietly under-report. " +
-	"A malformed entry is rejected before anything is written and names the offending guard."
+	"The array replaces the whole set; '[]' removes all, omitted leaves it. " +
+	"Every entry needs name, path (dotted), window_s (trailing seconds), ceiling and aggregation ('sum', 'max' or 'avg'). " +
+	"Pings with no number at the path are skipped, not counted as zero. " +
+	"At most 5 guards, window_s at most 604800 (7 days); " +
+	"a malformed entry is rejected by name; the set stays as is."
 
 // parseGuardsArg decodes the `guards` tool argument.
 //

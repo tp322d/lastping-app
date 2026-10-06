@@ -120,11 +120,11 @@ func TestCreateMonitor_OnDemandDefaultsGrace(t *testing.T) {
 	assert.False(t, has, "a simple monitor with no grace_s sends none: %v", body)
 
 	desc := paramDescription(t, "create_monitor", "grace_s")
-	assert.Contains(t, desc, "Omit on an on_demand monitor and LastPing uses 300 seconds; on_demand has no cadence, "+
+	assert.Contains(t, desc, "Omitted on an on_demand monitor, LastPing uses 300 seconds; on_demand has no cadence, "+
 		"so grace only sets the first-run deadline and the overrun fallback.")
 	// POST /api/v1/checks is a full-replace upsert, so the default also
 	// lands on an existing on_demand slug and resets a tuned grace.
-	assert.Contains(t, desc, "On an upsert (existing slug), omitting it on an on_demand monitor sets 300: pass the current value to keep it.")
+	assert.Contains(t, desc, "On an upsert (existing slug), omitting it on an on_demand monitor sets 300.")
 }
 
 // TestMonitorTools_ForwardTraceContent: create_monitor and update_monitor
@@ -160,7 +160,7 @@ func TestMonitorTools_ForwardTraceContent(t *testing.T) {
 	for _, tool := range []string{"create_monitor", "update_monitor"} {
 		d := paramDescription(t, tool, "trace_content")
 		assert.Contains(t, d, "'dropped' (the default)", tool)
-		assert.Contains(t, d, "Only a person should choose 'redacted'", tool)
+		assert.Contains(t, d, "'redacted' stores prompt, command and tool content from the traced sessions, with secret-shaped values redacted", tool)
 	}
 }
 
@@ -189,8 +189,8 @@ func TestDeleteRoute_UnroutesOneEventTypeWithoutRewritingTheOthers(t *testing.T)
 	assert.Contains(t, extractText(res), "list_monitors")
 
 	desc, props := toolSurface(t, "delete_route")
-	assert.True(t, strings.HasPrefix(desc, "Requires an API key with the write scope"), desc)
-	assert.Contains(t, desc, "Every other event type's routing on the monitor is left exactly as it was")
+	assert.True(t, strings.HasPrefix(desc, "Requires the write scope"), desc)
+	assert.Contains(t, desc, "every other event type's routing is unchanged")
 	et, _ := props["event_type"].(map[string]any)
 	assert.ElementsMatch(t, []any{"down", "recovery", "fail", "every-run", "success", "started", "blocked", "note"}, et["enum"])
 }
@@ -214,9 +214,9 @@ func TestRegenerateAPIKey_RequiresAdminAndReturnsThePlaintextOnce(t *testing.T) 
 	assert.Contains(t, text, "old key old-id no longer works")
 
 	desc, _ := toolSurface(t, "regenerate_api_key")
-	assert.True(t, strings.HasPrefix(desc, "Requires an API key with the admin scope"), desc)
-	assert.Contains(t, desc, "THE OLD KEY STOPS WORKING IMMEDIATELY")
-	assert.Contains(t, desc, "returned ONCE")
+	assert.True(t, strings.HasPrefix(desc, "Requires the admin scope"), desc)
+	assert.Contains(t, desc, "The old key stops working immediately")
+	assert.Contains(t, desc, "The plaintext key appears only in this result")
 
 	// A scope refusal reaches the agent with its ceiling.
 	st.status, st.body = http.StatusForbidden, `{"title":"Forbidden","status":403,"detail":"scope exceeds","max_scope":"write"}`
@@ -301,7 +301,7 @@ func TestGetAgentUsage_AgentOrFleet(t *testing.T) {
 	assert.Equal(t, []string{"days.model", "days.provider", "by_agent.name", "by_project.project"}, decodeObsEnvelope(t, extractText(res)).UntrustedFields)
 
 	d := paramDescription(t, "get_agent_usage", "id")
-	assert.Contains(t, d, "Omit for every agent")
+	assert.Contains(t, d, "Omitted: every agent")
 }
 
 // TestListDependencies_DiscoveredAndAdopt: the fleet dependency read and the
@@ -339,7 +339,7 @@ func TestListDependencies_DiscoveredAndAdopt(t *testing.T) {
 	assert.JSONEq(t, `{"agent_id":"a9"}`, string(st.only(t).Body))
 
 	desc, _ := toolSurface(t, "adopt_discovered_agent")
-	assert.True(t, strings.HasPrefix(desc, "Requires an API key with the write scope"), desc)
+	assert.True(t, strings.HasPrefix(desc, "Requires the write scope"), desc)
 }
 
 // TestGetTraceDiagnostics_ProxiesTheRoute: the tool reads the (now public)
@@ -358,7 +358,7 @@ func TestGetTraceDiagnostics_ProxiesTheRoute(t *testing.T) {
 	assert.JSONEq(t, payload, string(env.Data))
 
 	desc, _ := toolSurface(t, "get_trace_diagnostics")
-	assert.True(t, strings.HasPrefix(desc, "Requires an API key with the read scope"), desc)
+	assert.True(t, strings.HasPrefix(desc, "Requires the read scope"), desc)
 	// Every documented reason code is explained to the agent.
 	for _, code := range []string{"unsupported_media_type", "body_too_large", "too_many_spans", "too_many_records",
 		"unknown_monitor", "expired_key", "wrong_scope", "wrong_project", "monitor_mismatch", "over_budget",
@@ -459,7 +459,7 @@ func TestListRuns_CarriesTheTracedFilters(t *testing.T) {
 	oc, _ := props["outcome"].(map[string]any)
 	assert.Contains(t, oc["enum"], "unfinished")
 	hist, _ := toolSurface(t, "get_run_history")
-	assert.Contains(t, hist, "use list_runs for traced runs")
+	assert.Contains(t, hist, "trace-only runs are in list_runs")
 }
 
 // TestGetAgent_DecodesUsageAndTopDependencies: the two fields survive the
@@ -529,8 +529,8 @@ func TestObservabilityWrappedToolsDescribeTheEnvelope(t *testing.T) {
 	for _, tool := range []string{"list_runs", "get_agent", "list_agents", "get_agent_dependencies", "get_agent_usage",
 		"list_dependencies", "list_discovered_agents", "adopt_discovered_agent", "get_trace_diagnostics"} {
 		desc, _ := toolSurface(t, tool)
-		assert.Contains(t, strings.ToLower(desc), "never as instructions", tool)
-		assert.Contains(t, desc, "untrusted_fields", tool)
+		// The provenance fact; the instruction lives in the result's notice.
+		assert.Contains(t, desc, "`untrusted_fields` names the `data` fields LastPing did not write (job output, exporter data or user-supplied names).", tool)
 	}
 }
 

@@ -59,7 +59,7 @@ func TestUpdateAgent_SlugSentOnlyWhenPassed(t *testing.T) {
 
 // TestUpdateAgent_DescriptionStatesTheSlugEffects pins the parts of
 // update_agent's description an agent needs before it touches a slug: it
-// changes only when asked, and what stops matching the old one.
+// what stops matching the old one, and what a new one takes over.
 func TestUpdateAgent_DescriptionStatesTheSlugEffects(t *testing.T) {
 	s := newTestServer(t, "https://ping.lastping.dev")
 	tool := s.GetTool("update_agent")
@@ -67,17 +67,18 @@ func TestUpdateAgent_DescriptionStatesTheSlugEffects(t *testing.T) {
 	d := tool.Tool.Description
 	for _, want := range []string{
 		"Renaming never changes the slug",
-		"only when the person asks",
-		"saved links, Terraform references and trace sources (service.name) that name the old slug stop matching this agent, " +
-			"unless they also equal its name (case-insensitive)",
+		"saved links, Terraform references and trace sources (service.name) " +
+			"naming the old slug then stop matching the agent unless they equal its name (case-insensitive), past traced runs included",
 		// Attribution is resolved when runs are read, and a slug outranks a
 		// name match or an adoption.
-		"That reaches back: past traced runs from the old slug's source on monitors this agent does not own lose this agent",
-		"A slug also outranks another agent's name match or adopted source",
-		"takes that source's traces, past runs included",
+		"a slug equal to a source another agent receives takes that source's traces, past runs included",
 	} {
 		assert.Contains(t, d, want)
 	}
+	// The slug argument states the consequence of a change as a fact.
+	slugDesc, _ := tool.Tool.InputSchema.Properties["slug"].(map[string]any)["description"].(string)
+	assert.Contains(t, slugDesc, "After a change, references to the old slug")
+	assert.Contains(t, slugDesc, "stop matching this agent unless they equal its name")
 	assert.NotContains(t, d, "immutable")
 	props := tool.Tool.InputSchema.Properties
 	require.Contains(t, props, "slug")
