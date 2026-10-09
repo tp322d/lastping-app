@@ -291,15 +291,75 @@ const (
 // monitor created without one (see onDemandGraceDefaultDesc).
 const onDemandDefaultGraceS = 300
 
-// nullableString widens a string argument's schema type to ["string", "null"].
-// update_monitor clears probe_expected_body, ci_workflow and ci_branch with an
-// explicit JSON null (an empty string means "unchanged"), so the schema must
-// admit null: a client that validates arguments against a plain "string"
-// cannot send it, and has been seen to send the string "null" instead.
-// mcp-go has no option for a union type; WithString applies its options after
-// setting "type", so overriding the key here is what reaches tools/list.
-func nullableString(schema map[string]any) {
-	schema["type"] = []string{"string", "null"}
+// clearableFields are the update_monitor settings whose empty string the API
+// reads as "leave as stored", so a removal has to reach the PATCH as JSON
+// null. The clear argument names them; it exists because a union schema type
+// ["string","null"] is refused by some clients' function-declaration formats,
+// which fail the whole request, so the three keep a plain "string" schema.
+var clearableFields = []string{"probe_expected_body", "ci_workflow", "ci_branch"}
+
+// parseClearArg reads update_monitor's clear argument: a comma-separated list
+// of clearableFields names. An unknown name is an error listing the accepted
+// ones, so a typo never turns into a silent no-op.
+func parseClearArg(raw any) (map[string]bool, error) {
+	out := map[string]bool{}
+	if raw == nil {
+		return out, nil
+	}
+	s, ok := raw.(string)
+	if !ok {
+		return nil, fmt.Errorf("clear: expected a comma-separated string of setting names (accepted: %s)", strings.Join(clearableFields, ", "))
+	}
+	for _, part := range strings.Split(s, ",") {
+		name := strings.ToLower(strings.TrimSpace(part))
+		if name == "" {
+			continue
+		}
+		known := false
+		for _, f := range clearableFields {
+			if f == name {
+				known = true
+				break
+			}
+		}
+		if !known {
+			return nil, fmt.Errorf("clear: unknown setting %q (accepted: %s)", name, strings.Join(clearableFields, ", "))
+		}
+		out[name] = true
+	}
+	return out, nil
+}
+
+// nullLikeString reports a string that reads as an attempt to send null: a
+// client without a way to produce JSON null has been seen to send the STRING
+// "null", which the API would store as a literal CI filter (a branch called
+// "null" matches no run).
+func nullLikeString(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "null", "nil", "none", "undefined":
+		return true
+	}
+	return false
+}
+
+// refuseNullLikeCIFilter returns the error result for a null-looking string in
+// ci_workflow or ci_branch, or nil. probe_expected_body is never checked here:
+// "the body contains null" is a legitimate check, so there it is a value.
+func refuseNullLikeCIFilter(args map[string]any, tool string) *mcp.CallToolResult {
+	for _, key := range []string{"ci_workflow", "ci_branch"} {
+		v, ok := args[key].(string)
+		if !ok || !nullLikeString(v) {
+			continue
+		}
+		how := fmt.Sprintf("to remove this filter, call update_monitor with clear: %q", key)
+		if tool == "update_monitor" {
+			how = fmt.Sprintf("to remove this filter, use clear: %q", key)
+		}
+		return mcp.NewToolResultError(fmt.Sprintf(
+			"%s: %q reads as null, not as a filter name, and is refused; %s; to leave it unchanged, omit the argument.",
+			key, v, how))
+	}
+	return nil
 }
 
 func registerCheckTools(s *server.MCPServer) {
@@ -409,7 +469,7 @@ func registerCheckTools(s *server.MCPServer) {
 			mcp.WithDescription("Updates a monitor by UUID with merge-patch semantics: supplied fields change, omitted fields keep their stored value. "+
 				"tags, assertions (conditions a successful run's ping body has to satisfy, which catch a job that exits 0 having done nothing) and "+
 				"guards (ceilings on a number the job reports, which catch a looping agent) each replace the whole set; get_monitor returns the current sets. "+
-				"slug and ci_provider are immutable; only the ci_workflow and ci_branch filters change here."),
+				"slug and ci_provider are immutable; only the ci_workflow and ci_branch filters change here. clear removes a setting."),
 			mcp.WithString("id", mcp.Required(), mcp.Description("Monitor UUID.")),
 			mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable monitor name.")),
 			mcp.WithString("schedule_kind", mcp.Description("'simple', 'cron' or 'on_demand'. Not accepted on an http monitor, and neither are period_s, "+
@@ -437,14 +497,16 @@ func registerCheckTools(s *server.MCPServer) {
 			mcp.WithNumber("probe_interval_s", mcp.Description(probeIntervalDesc+" Omitted: unchanged.")),
 			mcp.WithString("probe_method", mcp.Description(probeMethodDesc+" Omitted: unchanged.")),
 			mcp.WithNumber("probe_expected_status", mcp.Description(probeExpectedStatusDesc+" Omitted: unchanged.")),
-			mcp.WithString("probe_expected_body", nullableString, mcp.Description(probeExpectedBodyDesc+
-				" Omitted or an empty string: unchanged. JSON null stops inspecting the body. The string \"null\" is an ordinary value: it matches a body containing the text null.")),
+			mcp.WithString("probe_expected_body", mcp.Description(probeExpectedBodyDesc+
+				" Omitted or an empty string: unchanged. clear: 'probe_expected_body' stops inspecting the body. The string 'null' is an ordinary value here.")),
 			mcp.WithNumber("probe_timeout_s", mcp.Description(probeTimeoutDesc+" Omitted: unchanged.")),
 			mcp.WithBoolean("probe_follow_redirects", mcp.Description(probeFollowRedirectsDesc+" Omitted: unchanged; false turns following back off.")),
-			mcp.WithString("ci_workflow", nullableString, mcp.Description(ciWorkflowDesc+
-				" Omitted or an empty string: unchanged. JSON null (not the string \"null\", which is refused) removes the filter.")),
-			mcp.WithString("ci_branch", nullableString, mcp.Description(ciBranchDesc+
-				" Omitted or an empty string: unchanged. JSON null (not the string \"null\", which is refused) removes the filter.")),
+			mcp.WithString("ci_workflow", mcp.Description(ciWorkflowDesc+
+				" Omitted or an empty string: unchanged. clear: 'ci_workflow' removes the filter; a value such as 'null' or 'none' is refused.")),
+			mcp.WithString("ci_branch", mcp.Description(ciBranchDesc+
+				" Omitted or an empty string: unchanged. clear: 'ci_branch' removes the filter; a value such as 'null' or 'none' is refused.")),
+			mcp.WithString("clear", mcp.Description("Comma-separated settings to remove: ci_workflow, ci_branch, probe_expected_body. "+
+				"Example: 'ci_workflow,ci_branch'. An unknown name, or a setting named here and also given a value in the same call, is refused. Omitted: nothing is removed.")),
 			mcp.WithString("tags", mcp.Description("Comma-separated labels to set on this monitor, e.g. 'agent:claude,env:prod'. Replaces existing tags. Max 20 tags, each max 50 chars.")),
 			mcp.WithString("agent_id", mcp.Description(agentIDDesc+" Omitted: the current attachment (or lack of one) is unchanged.")),
 			mcp.WithString("assertions", mcp.Description(assertionsDesc)),
@@ -662,6 +724,9 @@ func (c *APIClient) createMonitor(ctx context.Context, req mcp.CallToolRequest) 
 	}
 	if v, ok := args["ci_provider"].(string); ok && v != "" {
 		body["ci_provider"] = v
+	}
+	if res := refuseNullLikeCIFilter(args, "create_monitor"); res != nil {
+		return res, nil
 	}
 	if v, ok := args["ci_workflow"].(string); ok && v != "" {
 		body["ci_workflow"] = v
@@ -941,29 +1006,34 @@ func (c *APIClient) updateMonitor(ctx context.Context, id string, req mcp.CallTo
 	// fields whose EMPTY STRING the API deliberately reads as "leave as
 	// stored" (a compatibility rule for clients that send a full body with ""
 	// for an unset filter). An explicit JSON null is therefore the only way to
-	// clear them, and a client that sends null for a string argument arrives
-	// here as a present key with a nil value. Handling that shape is what
-	// makes clearing expressible from MCP at all; without it these three
-	// fields would be set-once through this surface.
-	for _, key := range []string{"probe_expected_body", "ci_workflow", "ci_branch"} {
+	// clear them. The clear argument is how an agent asks for that null: every
+	// client can send a string, while the union schema type that would let a
+	// client send null directly is refused by some function-declaration
+	// formats, failing every tool. A client that does send JSON null for one
+	// of them still clears it.
+	toClear, cErr := parseClearArg(args["clear"])
+	if cErr != nil {
+		return mcp.NewToolResultError(cErr.Error()), nil
+	}
+	if res := refuseNullLikeCIFilter(args, "update_monitor"); res != nil {
+		return res, nil
+	}
+	for _, key := range clearableFields {
 		raw, present := args[key]
+		if toClear[key] {
+			if v, ok := raw.(string); ok && v != "" {
+				return mcp.NewToolResultError(fmt.Sprintf(
+					"%s is named in clear and also given the value %q; send one or the other.", key, v)), nil
+			}
+			body[key] = nil
+			continue
+		}
 		if !present {
 			continue
 		}
 		if raw == nil {
 			body[key] = nil
 			continue
-		}
-		// A client whose schema handling cannot produce JSON null has been
-		// seen to send the STRING "null" instead, which the API would store
-		// as a literal filter (a branch called "null" matches no run).
-		// Refuse it for the two CI filters before anything is sent, and say
-		// how to clear. probe_expected_body is exempt: "the body contains
-		// null" is a legitimate check, so there the string is a value.
-		if v, ok := raw.(string); ok && v == "null" && key != "probe_expected_body" {
-			return mcp.NewToolResultError(fmt.Sprintf(
-				"%s: the string \"null\" is not a clear. To remove this setting, send JSON null (not a quoted string); "+
-					"to leave it unchanged, omit the argument.", key)), nil
 		}
 		if v, ok := raw.(string); ok && v != "" {
 			body[key] = v
