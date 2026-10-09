@@ -244,6 +244,8 @@ func (c *APIClient) discoverMonitorsReconcile(ctx context.Context, rawSources st
 		return mcp.NewToolResultError(fmt.Sprintf("failed to decode response: %v", uErr)), nil
 	}
 
+	body = stripCIIgnored(body)
+
 	var pretty bytes.Buffer
 	if iErr := json.Indent(&pretty, body, "", "  "); iErr != nil {
 		pretty.Reset()
@@ -262,4 +264,53 @@ func (c *APIClient) discoverMonitorsReconcile(ctx context.Context, rawSources st
 		len(counts.Existing), len(counts.Orphaned), pretty.String())
 
 	return mcp.NewToolResultText(summary), nil
+}
+
+// stripCIIgnored removes `ci_ignored` from every monitor in a reconcile
+// response. Its last_workflow and last_branch are copied from a CI provider's
+// payload, so they are untrusted text that only get_monitor prints, under a
+// note naming them as job data. The body is rewritten only when a monitor
+// carried the key, so every other response is forwarded byte for byte; when
+// it is rewritten, keys come out in sorted order. A body that does not have
+// the expected shape is returned unchanged (the caller already decoded it).
+func stripCIIgnored(body []byte) []byte {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(body, &top); err != nil {
+		return body
+	}
+	changed := false
+	for _, key := range []string{"created", "existing", "orphaned"} {
+		raw, ok := top[key]
+		if !ok {
+			continue
+		}
+		var monitors []map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &monitors); err != nil {
+			return body
+		}
+		hit := false
+		for _, m := range monitors {
+			if _, ok := m["ci_ignored"]; ok {
+				delete(m, "ci_ignored")
+				hit = true
+			}
+		}
+		if !hit {
+			continue
+		}
+		out, err := json.Marshal(monitors)
+		if err != nil {
+			return body
+		}
+		top[key] = out
+		changed = true
+	}
+	if !changed {
+		return body
+	}
+	out, err := json.Marshal(top)
+	if err != nil {
+		return body
+	}
+	return out
 }
