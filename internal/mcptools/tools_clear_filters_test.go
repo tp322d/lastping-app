@@ -26,6 +26,10 @@ import (
 
 var clearableFilters = []string{"probe_expected_body", "ci_workflow", "ci_branch"}
 
+// ciFilters are the clearable filters for which the string "null" is refused:
+// a CI filter literally named "null" is never what the caller meant.
+var ciFilters = []string{"ci_workflow", "ci_branch"}
+
 // patchCapture is a fake API that records every PATCH body it receives.
 type patchCapture struct {
 	srv     *httptest.Server
@@ -126,7 +130,7 @@ func TestUpdateMonitorJSONNullClearsEachFilter(t *testing.T) {
 }
 
 func TestUpdateMonitorRefusesTheStringNull(t *testing.T) {
-	for _, key := range clearableFilters {
+	for _, key := range ciFilters {
 		t.Run(key, func(t *testing.T) {
 			pc := newPatchCapture(t)
 			c := mcptools.NewAPIClient(pc.srv.URL, "test-key")
@@ -139,6 +143,23 @@ func TestUpdateMonitorRefusesTheStringNull(t *testing.T) {
 			assert.EqualValues(t, 0, pc.patches.Load(), "nothing may reach the API on a refused call")
 		})
 	}
+}
+
+// probe_expected_body is exempt from the refusal: "the body contains null" is
+// a legitimate check, so the string "null" is forwarded as a value, not as a
+// clear (JSON null) and not refused.
+func TestUpdateMonitorForwardsTheStringNullAsExpectedBody(t *testing.T) {
+	pc := newPatchCapture(t)
+	c := mcptools.NewAPIClient(pc.srv.URL, "test-key")
+
+	result := callRaw(t, c, "update_monitor", `{"id":"abc-123","name":"Job","probe_expected_body":"null"}`)
+	require.False(t, result.IsError, extractText(result))
+	require.EqualValues(t, 1, pc.patches.Load())
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(pc.body, &body))
+	assert.Equal(t, "null", body["probe_expected_body"],
+		"the string \"null\" must reach the API as the string, not as JSON null")
 }
 
 // Positive companion to the refusal: an ordinary value still sets.

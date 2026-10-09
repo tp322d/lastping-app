@@ -438,7 +438,7 @@ func registerCheckTools(s *server.MCPServer) {
 			mcp.WithString("probe_method", mcp.Description(probeMethodDesc+" Omitted: unchanged.")),
 			mcp.WithNumber("probe_expected_status", mcp.Description(probeExpectedStatusDesc+" Omitted: unchanged.")),
 			mcp.WithString("probe_expected_body", nullableString, mcp.Description(probeExpectedBodyDesc+
-				" Omitted or an empty string: unchanged. JSON null (not the string \"null\", which is refused) stops inspecting the body.")),
+				" Omitted or an empty string: unchanged. JSON null stops inspecting the body. The string \"null\" is an ordinary value: it matches a body containing the text null.")),
 			mcp.WithNumber("probe_timeout_s", mcp.Description(probeTimeoutDesc+" Omitted: unchanged.")),
 			mcp.WithBoolean("probe_follow_redirects", mcp.Description(probeFollowRedirectsDesc+" Omitted: unchanged; false turns following back off.")),
 			mcp.WithString("ci_workflow", nullableString, mcp.Description(ciWorkflowDesc+
@@ -957,8 +957,10 @@ func (c *APIClient) updateMonitor(ctx context.Context, id string, req mcp.CallTo
 		// A client whose schema handling cannot produce JSON null has been
 		// seen to send the STRING "null" instead, which the API would store
 		// as a literal filter (a branch called "null" matches no run).
-		// Refuse it before anything is sent, and say how to clear.
-		if v, ok := raw.(string); ok && v == "null" {
+		// Refuse it for the two CI filters before anything is sent, and say
+		// how to clear. probe_expected_body is exempt: "the body contains
+		// null" is a legitimate check, so there the string is a value.
+		if v, ok := raw.(string); ok && v == "null" && key != "probe_expected_body" {
 			return mcp.NewToolResultError(fmt.Sprintf(
 				"%s: the string \"null\" is not a clear. To remove this setting, send JSON null (not a quoted string); "+
 					"to leave it unchanged, omit the argument.", key)), nil
