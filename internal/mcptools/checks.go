@@ -291,6 +291,17 @@ const (
 // monitor created without one (see onDemandGraceDefaultDesc).
 const onDemandDefaultGraceS = 300
 
+// nullableString widens a string argument's schema type to ["string", "null"].
+// update_monitor clears probe_expected_body, ci_workflow and ci_branch with an
+// explicit JSON null (an empty string means "unchanged"), so the schema must
+// admit null: a client that validates arguments against a plain "string"
+// cannot send it, and has been seen to send the string "null" instead.
+// mcp-go has no option for a union type; WithString applies its options after
+// setting "type", so overriding the key here is what reaches tools/list.
+func nullableString(schema map[string]any) {
+	schema["type"] = []string{"string", "null"}
+}
+
 func registerCheckTools(s *server.MCPServer) {
 	// create_monitor
 	s.AddTool(
@@ -426,14 +437,14 @@ func registerCheckTools(s *server.MCPServer) {
 			mcp.WithNumber("probe_interval_s", mcp.Description(probeIntervalDesc+" Omitted: unchanged.")),
 			mcp.WithString("probe_method", mcp.Description(probeMethodDesc+" Omitted: unchanged.")),
 			mcp.WithNumber("probe_expected_status", mcp.Description(probeExpectedStatusDesc+" Omitted: unchanged.")),
-			mcp.WithString("probe_expected_body", mcp.Description(probeExpectedBodyDesc+
-				" Omitted or an empty string: unchanged; an explicit JSON null stops inspecting the body.")),
+			mcp.WithString("probe_expected_body", nullableString, mcp.Description(probeExpectedBodyDesc+
+				" Omitted or an empty string: unchanged. JSON null (not the string \"null\", which is refused) stops inspecting the body.")),
 			mcp.WithNumber("probe_timeout_s", mcp.Description(probeTimeoutDesc+" Omitted: unchanged.")),
 			mcp.WithBoolean("probe_follow_redirects", mcp.Description(probeFollowRedirectsDesc+" Omitted: unchanged; false turns following back off.")),
-			mcp.WithString("ci_workflow", mcp.Description(ciWorkflowDesc+
-				" Omitted or an empty string (an API compatibility rule): unchanged; an explicit JSON null removes the filter.")),
-			mcp.WithString("ci_branch", mcp.Description(ciBranchDesc+
-				" Omitted or an empty string (an API compatibility rule): unchanged; an explicit JSON null removes the filter.")),
+			mcp.WithString("ci_workflow", nullableString, mcp.Description(ciWorkflowDesc+
+				" Omitted or an empty string: unchanged. JSON null (not the string \"null\", which is refused) removes the filter.")),
+			mcp.WithString("ci_branch", nullableString, mcp.Description(ciBranchDesc+
+				" Omitted or an empty string: unchanged. JSON null (not the string \"null\", which is refused) removes the filter.")),
 			mcp.WithString("tags", mcp.Description("Comma-separated labels to set on this monitor, e.g. 'agent:claude,env:prod'. Replaces existing tags. Max 20 tags, each max 50 chars.")),
 			mcp.WithString("agent_id", mcp.Description(agentIDDesc+" Omitted: the current attachment (or lack of one) is unchanged.")),
 			mcp.WithString("assertions", mcp.Description(assertionsDesc)),
@@ -942,6 +953,15 @@ func (c *APIClient) updateMonitor(ctx context.Context, id string, req mcp.CallTo
 		if raw == nil {
 			body[key] = nil
 			continue
+		}
+		// A client whose schema handling cannot produce JSON null has been
+		// seen to send the STRING "null" instead, which the API would store
+		// as a literal filter (a branch called "null" matches no run).
+		// Refuse it before anything is sent, and say how to clear.
+		if v, ok := raw.(string); ok && v == "null" {
+			return mcp.NewToolResultError(fmt.Sprintf(
+				"%s: the string \"null\" is not a clear. To remove this setting, send JSON null (not a quoted string); "+
+					"to leave it unchanged, omit the argument.", key)), nil
 		}
 		if v, ok := raw.(string); ok && v != "" {
 			body[key] = v
