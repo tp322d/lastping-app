@@ -1,4 +1,4 @@
-module github.com/tp322d/lastping-app
+module github.com/lastping-dev/lastping-app
 
 go 1.27.2
 

@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tp322d/lastping-app/internal/mcptools"
+	"github.com/lastping-dev/lastping-app/internal/mcptools"
 )
 
 // wantNotice is the hosted server's notice, byte for byte. The two servers

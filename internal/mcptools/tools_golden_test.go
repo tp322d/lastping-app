@@ -10,7 +10,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tp322d/lastping-app/internal/mcptools"
+	"github.com/lastping-dev/lastping-app/internal/mcptools"
 )
 
 // wantTools is the parity contract with the hosted MCP server: every tool the

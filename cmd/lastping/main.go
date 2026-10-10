@@ -25,7 +25,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/tp322d/lastping-app/internal/runner"
+	"github.com/lastping-dev/lastping-app/internal/runner"
 )
 
 const usage = `lastping — report what your commands and agents are doing.

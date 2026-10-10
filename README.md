@@ -16,8 +16,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/tp322d/lastping-app/releases"><img alt="Release" src="https://img.shields.io/github/v/release/tp322d/lastping-app?color=2dd4bf"></a>
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/tp322d/lastping-app"></a>
+  <a href="https://github.com/lastping-dev/lastping-app/releases"><img alt="Release" src="https://img.shields.io/github/v/release/lastping-dev/lastping-app?color=2dd4bf"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/lastping-dev/lastping-app"></a>
   <a href="go.mod"><img alt="Go 1.26" src="https://img.shields.io/badge/go-1.26-0f766e"></a>
   <a href="https://registry.terraform.io/providers/lastping-dev/lastping/latest"><img alt="Terraform: lastping-dev/lastping" src="https://img.shields.io/badge/terraform-lastping--dev%2Flastping-0f766e"></a>
   <a href="https://lastping.dev"><img alt="Free for individuals" src="https://img.shields.io/badge/free_for_individuals-0f766e"></a>
@@ -39,7 +39,7 @@ individuals.
 
 ```sh
 # 1. Install the CLI (macOS and Linux, amd64 and arm64)
-curl -fsSL https://raw.githubusercontent.com/tp322d/lastping-app/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/lastping-dev/lastping-app/main/install.sh | sh
 
 # 2. Wrap a job: a start ping, your command untouched, then its exit code
 lastping run --monitor <monitor-id> -- ./backup.sh
@@ -57,17 +57,17 @@ or let your assistant do it over MCP. Connect steps for each client are at
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tp322d/lastping-app/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/lastping-dev/lastping-app/main/install.sh | sh
 ```
 
 No Go toolchain needed — that pulls a prebuilt binary for macOS and Linux, on
 amd64 and arm64, and verifies its checksum. Windows builds are on the
-[releases page](https://github.com/tp322d/lastping-app/releases).
+[releases page](https://github.com/lastping-dev/lastping-app/releases).
 
 If you do have Go:
 
 ```sh
-go install github.com/tp322d/lastping-app/cmd/lastping@latest
+go install github.com/lastping-dev/lastping-app/cmd/lastping@latest
 ```
 
 ## `lastping run` — reporting you can't forget
@@ -127,7 +127,7 @@ authenticate a ping; the ping URL stays unauthenticated by design, as above.
 A one-click install for Claude Desktop on macOS and Windows that keeps your
 key in the system keychain. It needs no Node.js.
 
-1. Download [lastping.mcpb](https://github.com/tp322d/lastping-app/releases/latest/download/lastping.mcpb).
+1. Download [lastping.mcpb](https://github.com/lastping-dev/lastping-app/releases/latest/download/lastping.mcpb).
 2. Double-click it; Claude Desktop opens its install dialog.
 3. Paste a write-scope key from Settings, API keys at
    [app.lastping.dev](https://app.lastping.dev).
@@ -194,7 +194,7 @@ above.
 A stdio binary is also here if you would rather run it yourself:
 
 ```sh
-go install github.com/tp322d/lastping-app/cmd/lastping-mcp@latest
+go install github.com/lastping-dev/lastping-app/cmd/lastping-mcp@latest
 ```
 
 <details>

@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/tp322d/lastping-app/internal/mcptools"
+	"github.com/lastping-dev/lastping-app/internal/mcptools"
 )
 
 // TestCreateAPIKey_ScopePassedThrough — an explicit scope must reach the API
