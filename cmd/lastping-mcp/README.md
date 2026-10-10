@@ -22,10 +22,10 @@ covers **self-hosting** the stdio binary if you'd rather run it locally.
 ## Self-host (stdio binary)
 
 A single Go binary. No npm, no runtime dependencies. The public source lives at
-`github.com/tp322d/lastping-app`:
+`github.com/lastping-dev/lastping-app`:
 
 ```bash
-go install github.com/tp322d/lastping-app/cmd/lastping-mcp@latest
+go install github.com/lastping-dev/lastping-app/cmd/lastping-mcp@latest
 ```
 
 ## Build from source

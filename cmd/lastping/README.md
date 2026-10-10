@@ -3,7 +3,7 @@
 Wraps any command and reports its lifecycle to LastPing.
 
 ```bash
-go install github.com/tp322d/lastping-app/cmd/lastping@latest
+go install github.com/lastping-dev/lastping-app/cmd/lastping@latest
 ```
 
 ## `lastping run`

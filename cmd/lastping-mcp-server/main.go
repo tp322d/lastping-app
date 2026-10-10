@@ -20,7 +20,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/tp322d/lastping-app/internal/mcptools"
+	"github.com/lastping-dev/lastping-app/internal/mcptools"
 )
 
 const (

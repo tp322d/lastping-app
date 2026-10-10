@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install the `lastping` CLI.
 #
-#   curl -fsSL https://raw.githubusercontent.com/tp322d/lastping-app/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/lastping-dev/lastping-app/main/install.sh | sh
 #
 # Deliberately POSIX sh with no dependencies beyond curl (or wget) and tar:
 # this runs on machines that do not have Go, and often inside a CI image that
@@ -9,7 +9,7 @@
 # box at the exact moment they are deciding whether the product is worth it.
 set -eu
 
-REPO="tp322d/lastping-app"
+REPO="lastping-dev/lastping-app"
 BIN="lastping"
 
 # Install somewhere on PATH without needing root where possible. ~/.local/bin
