@@ -17,7 +17,7 @@ import (
 // struct lacks is silently dropped. ci_ignored must survive that, and its two
 // payload-supplied names must be flagged as job data.
 const (
-	ciIgnoredCheckJSON = `{"id":"ci-1","name":"Build","slug":"build","status":"up","ping_url":"https://ping.lastping.dev/ci-1","schedule_kind":"simple","period_s":3600,"grace_s":300,"paused":false,"created_at":"2026-07-22T00:00:00Z","tags":[],"ci_provider":"github","ci_configured":true,"ci_branch":"main","ci_ignored":{"count":12,"last_at":"2026-10-08T14:02:11Z","last_workflow":"CI","last_branch":"feature/x","last_matched_at":"2026-10-01T09:00:00Z","filters_changed_at":null,"same_workflow_count":4,"same_workflow_last_at":"2026-10-08T11:40:00Z","same_workflow_last_branch":"release/x"}}`
+	ciIgnoredCheckJSON = `{"id":"ci-1","name":"Build","slug":"build","status":"up","ping_url":"https://ping.lastping.dev/ci-1","schedule_kind":"simple","period_s":3600,"grace_s":300,"paused":false,"created_at":"2026-07-22T00:00:00Z","tags":[],"ci_provider":"github","ci_configured":true,"ci_branch":"main","ci_ignored":{"count":12,"last_at":"2026-10-08T14:02:11Z","last_workflow":"CI","last_branch":"feature/x","last_matched_at":"2026-10-01T09:00:00Z","filters_changed_at":null,"same_workflow_count":4,"same_workflow_last_at":"2026-10-08T11:40:00Z","same_workflow_last_branch":"release/x","new_workflow":"Deploy prod","new_workflow_first_at":"2026-10-08T12:00:00Z","new_workflow_count":3}}`
 	ciPlainCheckJSON   = `{"id":"ci-2","name":"Build","slug":"build2","status":"up","ping_url":"https://ping.lastping.dev/ci-2","schedule_kind":"simple","period_s":3600,"grace_s":300,"paused":false,"created_at":"2026-07-22T00:00:00Z","tags":[],"ci_provider":"github","ci_configured":true}`
 )
 
@@ -70,7 +70,10 @@ func TestGetMonitor_PassesCIIgnoredThroughAndFlagsItsNames(t *testing.T) {
 	assert.EqualValues(t, 4, ign["same_workflow_count"])
 	assert.Equal(t, "2026-10-08T11:40:00Z", ign["same_workflow_last_at"])
 	assert.Equal(t, "release/x", ign["same_workflow_last_branch"])
-	assert.Contains(t, text, "ci_ignored.last_workflow, ci_ignored.last_branch and ci_ignored.same_workflow_last_branch are raw output")
+	assert.Equal(t, "Deploy prod", ign["new_workflow"])
+	assert.Equal(t, "2026-10-08T12:00:00Z", ign["new_workflow_first_at"])
+	assert.EqualValues(t, 3, ign["new_workflow_count"])
+	assert.Contains(t, text, "ci_ignored.last_workflow, ci_ignored.last_branch, ci_ignored.same_workflow_last_branch and ci_ignored.new_workflow are raw output")
 }
 
 func TestGetMonitor_NoCIIgnored_NoNote(t *testing.T) {
