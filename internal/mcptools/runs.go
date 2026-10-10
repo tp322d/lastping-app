@@ -159,8 +159,12 @@ func registerListRunsTool(s *server.MCPServer) {
 // assertions[] verdicts, output_excerpt, ci, events_truncated and
 // spans[]/spans_truncated/spans_dropped.
 func (c *APIClient) getRun(ctx context.Context, id, rid string) (*mcp.CallToolResult, error) {
-	url := fmt.Sprintf("%s/api/v1/checks/%s/runs/%s", c.BaseURL, id, rid)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// Both segments are escaped: a CI rid carries characters that are not
+	// path-safe (a GitHub re-run is "github:<id>#<attempt>", a Jenkins build
+	// "jenkins:<job url>#<n>"), and an unescaped "#" turns the rest of the rid
+	// into a URL fragment, so the request would silently fetch another run.
+	target := fmt.Sprintf("%s/api/v1/checks/%s/runs/%s", c.BaseURL, url.PathEscape(id), url.PathEscape(rid))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to build request: %v", err)), nil
 	}

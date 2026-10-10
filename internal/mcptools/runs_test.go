@@ -86,3 +86,25 @@ func TestGetRun_NotFound(t *testing.T) {
 	assert.Contains(t, extractText(result), "no-such-rid")
 	assert.Contains(t, extractText(result), "abc-123")
 }
+
+// TestGetRun_CIRidReachesTheServerWhole: a GitHub re-run's rid carries "#"
+// ("github:<id>#<attempt>"). Unescaped, everything from "#" on became a URL
+// fragment and get_run fetched attempt 1's run instead of the one asked for.
+func TestGetRun_CIRidReachesTheServerWhole(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"rid": "github:38075639127#2"}`))
+	}))
+	defer srv.Close()
+
+	c := mcptools.NewAPIClient(srv.URL, "test-key")
+	s := newTestServer(t, "https://ping.lastping.dev")
+
+	for _, rid := range []string{"github:38075639127#2", "jenkins:https://ci.example.com/job/x/42/#42"} {
+		result := callTool(t, s, c, "get_run", map[string]interface{}{"id": "abc-123", "rid": rid})
+		require.False(t, result.IsError, "expected success; got: %s", extractText(result))
+		require.Equal(t, "/api/v1/checks/abc-123/runs/"+rid, gotPath, "the whole rid must reach the server")
+	}
+}

@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -103,7 +104,7 @@ func (c *APIClient) declareRunExpectations(ctx context.Context, checkID, rid, ra
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.BaseURL+"/api/v1/checks/"+checkID+"/runs/"+rid+"/expectations", bytes.NewReader(data))
+		c.BaseURL+"/api/v1/checks/"+url.PathEscape(checkID)+"/runs/"+url.PathEscape(rid)+"/expectations", bytes.NewReader(data))
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to build request: %v", err)), nil
 	}
